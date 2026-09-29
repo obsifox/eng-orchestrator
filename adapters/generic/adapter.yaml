@@ -1,7 +1,7 @@
 name: generic
 type: adapter
 description: "Generic fallback adapter, provider-independent"
-version: 1.1.0
+version: 1.2.0
 
 capabilities:
   - agent_contract_translation

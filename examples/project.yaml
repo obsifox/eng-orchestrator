@@ -1,0 +1,17 @@
+# Example: a PHP WordPress plugin whose docs are generated from the source.
+name: example-plugin
+kind: wordpress-plugin
+
+commands:
+  build: php bin/build.php --out=dist
+  test: php tests/run.php
+  lint: php bin/lint.php
+
+gates:
+  extras:
+    - name: docs_in_sync
+      command: python3 tools/docs/generate.py --check
+      required: true
+
+secret_scan:
+  allow: .eng/secret_scan.allow

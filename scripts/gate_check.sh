@@ -2,7 +2,7 @@
 # gate_check.sh - Executable gate checker v1.0.1
 # Fix: No gate reads state.json for PASS. Only real command outputs.
 # Usage: ./scripts/gate_check.sh <gate> [--no-run] [--state .eng/state.json] [--evidence .eng/evidence.md]
-# Gates: G0_Build, G1_Tests, G2_Lens, G3_Security, G4_Release, architecture, lens, security, release, all
+# Gates: G0_Build, G1_Tests, G2_Lens, G3_Security, G4_Release, G5_Project, all
 # Flags: --no-run = do not re-execute build/test, only inspect existing logs (for testing)
 # Exit codes: 0 PASS, 1 FAIL, 2 NOT TESTED, 3 NOT APPLICABLE, 4 error
 set -uo pipefail
@@ -22,7 +22,7 @@ while [[ $# -gt 0 ]]; do
     --no-run) NO_RUN=1; shift ;;
     -h|--help)
       echo "Usage: $0 <gate> [--no-run] [--state <json>] [--evidence <md>]"
-      echo "Gates: G0_Build, G1_Tests, G2_Lens, G3_Security, G4_Release, all"
+      echo "Gates: G0_Build, G1_Tests, G2_Lens, G3_Security, G4_Release, G5_Project, all"
       echo "  --no-run: skip re-execution, only inspect logs (useful for tests)"
       echo "Exit 0 PASS, 1 FAIL, 2 NOT TESTED, 3 NOT_APPLICABLE"
       echo ""
@@ -226,11 +226,71 @@ check_gate() {
       fi
       ;;
 
+    G5_Project|project)
+      # Project-defined extras from `.eng/project.yaml` (v1.2). A repository knows things
+      # no generic detector can: "the generated docs are in sync", "the translation
+      # catalogue is complete", "the built artefact verifies". Each extra runs through
+      # run_step, so its result is a log with EXIT_CODE - never a claim.
+      echo "Checking G5 Project extras..."
+      if [ ! -f .eng/project.yaml ]; then
+        echo "no .eng/project.yaml -> NOT APPLICABLE"
+        return 3
+      fi
+      local lines
+      lines=$(python3 "$SCRIPT_DIR/project_profile.py" --file .eng/project.yaml --gates 2>/dev/null) || lines=""
+      if [ -z "$lines" ]; then
+        echo "profile declares no gates.extras -> NOT APPLICABLE"
+        return 3
+      fi
+      local failed_required=0
+      local failed_optional=0
+      local tested=0
+      while IFS='|' read -r name command required; do
+        [ -z "$name" ] && continue
+        if [ "$NO_RUN" -eq 0 ]; then
+          echo "Running extra gate $name: $command"
+          # shellcheck disable=SC2086
+          run_step profile "$name" bash -c "$command"
+        fi
+        local code
+        code=$(get_exit ".eng/artifacts/profile_${name}.log")
+        if [ -z "$code" ]; then
+          echo "  $name -> NOT TESTED (no log)"
+          if [ "$required" = "true" ]; then tested=2; fi
+          continue
+        fi
+        tested=1
+        if [ "$code" = 0 ]; then
+          echo "  $name -> PASS (exit 0)"
+        elif [ "$required" = "true" ]; then
+          echo "  $name -> FAIL (exit $code, required)"
+          failed_required=1
+        else
+          echo "  $name -> FAIL (exit $code, optional - does not fail the gate)"
+          failed_optional=1
+        fi
+      done <<< "$lines"
+      if [ "$tested" = 2 ]; then
+        echo "G5 -> NOT TESTED (a required extra produced no log)"
+        return 2
+      fi
+      if [ "$failed_required" = 1 ]; then
+        echo "G5 -> FAIL (required project extra failed)"
+        return 1
+      fi
+      if [ "$failed_optional" = 1 ]; then
+        echo "G5 -> PASS with WARNINGS (an optional extra failed; see its log)"
+        return 0
+      fi
+      echo "G5 -> PASS"
+      return 0
+      ;;
+
     all)
       echo "Checking all gates..."
       local overall=0
       local results=()
-      for gate in G0_Build G1_Tests G2_Lens G3_Security G4_Release; do
+      for gate in G0_Build G1_Tests G2_Lens G3_Security G4_Release G5_Project; do
         echo "--- $gate ---"
         check_gate "$gate"
         local ec=$?

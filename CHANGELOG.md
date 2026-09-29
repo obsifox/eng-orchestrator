@@ -2,6 +2,21 @@
 
 All notable changes to eng-orchestrator skill.
 
+## 1.2.0 - 2026-09-29
+### Added - Project profiles, PHP support, project gates, secret allow list
+- **Project profile (`.eng/project.yaml`):** a repository declares its own `commands.build`, `commands.test`, `commands.lint`, `gates.extras` and `secret_scan.allow` once, and every gate uses them instead of guessing. Read by `scripts/project_profile.py` (no third-party dependency; a documented YAML subset, tabs and flow style rejected with a line number) and `scripts/project_profile.sh`. CLI: `--check` (0 ok, 3 none, 4 empty, 5 malformed), `--shell`, `--json`, `--gates`, `--get KEY`.
+- **PHP / Composer detection (fix):** `detect_cmds()` now checks `composer.json` scripts and `php tests/run.php` **before** the generic "a `tests/` directory means pytest" heuristic, and falls back to `phpunit`/`vendor/bin/phpunit` when only a `phpunit.xml(.dist)` exists. A WordPress plugin's gates are no longer `NOT TESTED` by misdetection.
+- **G5_Project gate:** project-defined extras from the profile run through `run_step` (a log with `EXIT_CODE`, never a claim). Required extras failing -> FAIL (1); only optional extras failing -> PASS with warnings (0); no profile or no extras -> NOT APPLICABLE (3); `--no-run` with a missing log -> NOT TESTED (2). Included in `gate all`.
+- **Secret-scan allow list:** `secret_scan.sh --allow <file>` (default `.eng/secret_scan.allow`), entries `pattern | path-substring | reason`. Both the path and the reason are mandatory: an allowance without a reason is ignored and reported (`ALLOWANCE IGNORED`), and a hit outside the allowed path stays a finding. Every applied allowance is printed in the log with its reason and counted in the summary.
+- **Templates and examples:** `.eng/templates/project.yaml`, `examples/project.yaml`.
+- **Docs:** `docs/architecture/project-profile.md` (format, resolution order, gate semantics, allow-list rules).
+- **Tests:** `tests/project_profile.test.sh` - 17 asserts covering profile parsing (valid, malformed, empty, missing), detection order (profile wins, PHP fallback, Node unchanged), G5 semantics (pass, fail, not applicable, no-run), and the allow list (documented occurrence passes, undocumented fails, reasonless allowance ignored). Total: 105 asserts across 6 suites.
+
+### Changed
+- `README.md`, `SKILL.md`, `config/*.yaml`, `workflows/*.yaml`, `domains/*.yaml`, `agents/*.yaml`, `adapters/*/*.yaml`: version 1.1.0 -> 1.2.0.
+- `.github/workflows/test.yml`: runs the new suite.
+- Backward compatible: without `.eng/project.yaml` and without `composer.json`/`tests/run.php`, detection behaves exactly as in v1.1.0.
+
 ## 1.1.0 - 2026-09-29
 ### Added - Architecture Gap Closure (Control Plane)
 - **State Machine:** 17 canonical states (INTAKE, BASELINE, CLASSIFICATION, PLANNING, EXECUTION, VALIDATION, REVIEW, REWORK, VERIFICATION, RELEASE_REVIEW, HUMAN_APPROVAL, COMPLETED, BLOCKED, FAILED, CANCELLED, ESCALATED, RECOVERY) with 22+ valid transitions, 7 explicit invalid, deterministic rejection via `scripts/state_machine.sh` + `config/state_machine.yaml` - 37 tests PASS

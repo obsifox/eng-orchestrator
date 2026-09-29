@@ -7,7 +7,7 @@ description: >
   feature, bugfix, refactor, prod work, multi-file. WHEN NOT TO USE: one-line
   typo explanation, pure Q&A, chatting. Persian: "اینو بیلد کن"، "مهندسی حرفه‌ای"،
   "ارکستراسیون کن"، "از صفر بساز".
-version: 1.1.0
+version: 1.2.0
 ---
 
 # eng-orchestrator - Control Plane v1.1
@@ -36,6 +36,9 @@ Smallest effective team. Roles are lenses/checklists, not personas. Agents are c
 - `scripts/playbook_engine.sh compose --type feature --domain wordpress --risk security:high --tier T3 --out .eng/plan.md`
 - Workflows in `workflows/*.yaml` (11), domains in `domains/*.yaml` (extensible). See `docs/workflows/types.md`.
 - Preview (no mutation): `./scripts/preview.sh --type feature --task "desc"` or `./scripts/eng.sh preview`. Must NOT mutate repo. Shows classification, tier, risk, agents, model policy, permissions, gates, artifacts, human approval, complexity.
+
+## 2b. Project Profile (v1.2)
+The repository declares its own commands in `.eng/project.yaml` (build/test/lint, gate extras, secret allow file). `scripts/project_profile.sh --check` validates it; `detect_cmds` prefers it over every heuristic; `G5_Project` runs the extras. Without a profile, detection is unchanged (v1.1 behaviour). See `docs/architecture/project-profile.md`.
 
 ## 3. Baseline First
 Run `scripts/baseline.sh` BEFORE change. Produces `baseline_build.log` and `baseline_test.log` with `EXIT_CODE`. Save to `evidence.md`. See `references/evidence-rules.md`.

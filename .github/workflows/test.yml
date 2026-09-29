@@ -1,4 +1,4 @@
-name: Eng Orchestrator CI - Full Suite v1.1
+name: Eng Orchestrator CI - Full Suite v1.2
 
 on:
   push:
@@ -32,6 +32,12 @@ jobs:
 
       - name: Run playbook tests (7 compositions)
         run: ./tests/playbook.test.sh
+
+      - name: Run project profile tests (17 asserts) - v1.2
+        run: ./tests/project_profile.test.sh
+
+      - name: Validate the example project profile
+        run: python3 scripts/project_profile.py --file examples/project.yaml --check
 
       - name: Run evaluation suite (50 scenarios)
         run: |

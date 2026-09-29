@@ -1,11 +1,13 @@
-# 🛡️ eng-orchestrator - Control Plane v1.1.0
+# 🛡️ eng-orchestrator - Control Plane v1.2.0
 
 [![Tests](https://github.com/obsifox/eng-orchestrator/actions/workflows/test.yml/badge.svg)](https://github.com/obsifox/eng-orchestrator/actions/workflows/test.yml)
-[![Version](https://img.shields.io/badge/version-1.1.0-blue.svg)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-1.2.0-blue.svg)](CHANGELOG.md)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![Skill](https://img.shields.io/badge/skill-control%20plane-orange.svg)](SKILL.md)
 
 > **Engineering Orchestration Control Plane** — Turns AI agent into adaptive org with state machine, run manager, event log, agent contracts, permissions, model routing, playbook engine, preview, recovery, receipt.
+
+**v1.2.0 (current):** Project profiles (`.eng/project.yaml`) + PHP/Composer detection, `G5_Project` gate for project-defined extras, secret-scan allow list with mandatory reasons (17 new asserts, 105 total).
 
 **v1.1.0:** State machine (17 states, 37 tests), Run Manager (RUN-xxx isolation), Event Log (23 types), Agent Contracts (6), Permission Matrix (21 tests, least privilege), Model Routing (Tier != Model), Playbook Engine (11 workflows + 4 domains), Preview (no mutation), Recovery (8 tests), Worktree Isolation, Receipt, Skill Registry, Adapters, 50 eval scenarios.
 
@@ -25,6 +27,10 @@
 ## 🚀 Quick Start
 
 ```bash
+# 0. Declare how THIS project builds, tests and lints (v1.2)
+cat .eng/project.yaml            # commands + gate extras + secret allow file
+./scripts/project_profile.sh --check
+
 # 1. Agent reads SKILL.md (94 lines, <150)
 cat SKILL.md
 
@@ -51,7 +57,7 @@ cat SKILL.md
 ./scripts/eng.sh gate G2_Lens --no-run
 ./scripts/eng.sh gate all
 
-# 7. Run all tests (88 PASS)
+# 7. Run all tests (105 PASS)
 ./tests/gates.test.sh          # 15
 ./tests/state_machine.test.sh  # 37
 ./tests/permissions.test.sh    # 21
@@ -67,7 +73,7 @@ cat SKILL.md
 
 ```
 SKILL.md (94 lines) - control plane, triggers: "build this", "اینو بیلد کن"
-CHANGELOG.md - v1.0.0 -> v1.0.1 -> v1.1.0
+CHANGELOG.md - v1.0.0 -> v1.0.1 -> v1.2.0
 LICENSE (MIT)
 
 config/
@@ -99,7 +105,8 @@ scripts/ (control plane + gates)
   receipt.sh - receipt.json generation
   permission_check.sh - enforce least privilege (21 tests)
   skill_registry.sh - discover, inspect, validate, load, disable
-  lib_run.sh - run_step with EXIT_CODE
+  lib_run.sh - run_step with EXIT_CODE; detect_cmds (profile -> manifests -> heuristics)
+  project_profile.sh / project_profile.py - read .eng/project.yaml (v1.2)
   detect_env.sh, baseline.sh, gate_check.sh (no state.json trust), secret_scan.sh, dep_audit.sh, report_lint.sh
 
 docs/
@@ -112,6 +119,7 @@ docs/
   recovery/ - recovery
   adapters/ - overview
   evaluation/ - scenarios
+  architecture/project-profile.md - .eng/project.yaml contract (v1.2)
 
 references/ (backward compat)
   tiers.md, state-format.md, evidence-rules.md, failure-modes.md, interaction-protocol.md, report-template.md
@@ -122,10 +130,11 @@ evals/
   results/ - real executed with/without
 
 examples/ - good vs bad plan/verify/review (structured findings)
-.eng/templates/ - brief, plan, decisions, evidence, state.json
+.eng/templates/ - brief, plan, decisions, evidence, state.json, project.yaml (v1.2)
 .eng/knowledge/ - lessons/, failures/, decisions/, patterns/, regressions/
 tests/
-  gates.test.sh (15 asserts), state_machine.test.sh (37), permissions.test.sh (21), recovery.test.sh (8), playbook.test.sh (7) = 88 total
+  gates.test.sh (15 asserts), state_machine.test.sh (37), permissions.test.sh (21),
+  recovery.test.sh (8), playbook.test.sh (7), project_profile.test.sh (17) = 105 total
 .github/workflows/test.yml - CI
 ```
 
@@ -137,6 +146,7 @@ tests/
 | No state.json trust | G0/G1 re-execute build/test, ignore state.json PASS |
 | Independent verification | Verifier fresh context, only spec+diff+logs |
 | Anti-sycophancy | Must list concrete files checked or explicit clean |
+| Allow list discipline | A secret-scan allowance needs pattern + path + reason; a silent ignore is impossible |
 | Loop caps | 2 per gate then escalate to user |
 | Token budgets | T0 20k, T1 60k, T2 150k, T3 350k |
 | Executable gates | `EXIT_CODE=0` check, structured findings parsing |
@@ -147,6 +157,39 @@ tests/
 | Scope control | REQUIRED-FOR-ACCEPTANCE vs BACKLOG |
 | Roles = lenses | Checklists, not personas, max 5-6 |
 | Stopping rules | Measurable: exit codes, no HIGH OPEN, report_lint PASS |
+
+## 🧭 Project profile (v1.2)
+
+`lib_run.sh detect_cmds` used to guess from file names — and guessed wrong for PHP (a
+`tests/` directory looked like pytest). A repository now states its commands once:
+
+```yaml
+# .eng/project.yaml
+name: DashWoo
+commands:
+  build: php bin/build.php --out=/home/user/releases
+  test: php tests/run.php
+  lint: php bin/lint.php
+gates:
+  extras:
+    - name: docs_in_sync
+      command: python3 tools/docs/generate.py --check
+      required: true
+    - name: upload_verify
+      command: python3 tools/verify-upload.py 1.6.0
+      required: false
+secret_scan:
+  allow: .eng/secret_scan.allow
+```
+
+| Piece | Behaviour |
+| --- | --- |
+| detection order | profile -> `package.json` -> `composer.json` / `tests/run.php` -> go/pytest/Makefile/gradle -> `phpunit.xml` |
+| `G5_Project` | runs `gates.extras`; required failure = FAIL, optional failure = warning, no profile = NOT APPLICABLE |
+| allow list | `.eng/secret_scan.allow`, entries `pattern \| path \| reason`; no path or no reason means the entry does not apply |
+| validation | `python3 scripts/project_profile.py --check` (0 ok, 3 none, 4 empty, 5 malformed) |
+
+Full details: `docs/architecture/project-profile.md`. Tests: `tests/project_profile.test.sh` (17).
 
 ## 📊 Tiers
 
@@ -205,7 +248,7 @@ MIT - See LICENSE
 
 ## 🔖 Version
 
-**1.1.0** - Control Plane release. See CHANGELOG.md and `docs/audit/v1.1-implementation-audit.md` for full audit.
+**1.2.0** - Control Plane release. See CHANGELOG.md and `docs/audit/v1.1-implementation-audit.md` for full audit.
 
 - 88 tests PASS (15 gates + 37 state machine + 21 permissions + 8 recovery + 7 playbook)
 - 50 eval scenarios (15 existing + 35 new)
