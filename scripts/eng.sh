@@ -13,8 +13,6 @@ case "${1:-}" in
     ;;
   run)
     shift
-    # Create run and start orchestration
-    # For now, just create run
     "$SCRIPT_DIR/run_manager.sh" create "$@"
     ;;
   list)
@@ -56,29 +54,55 @@ case "${1:-}" in
     shift
     "$SCRIPT_DIR/gate_check.sh" "$@"
     ;;
+  arena)
+    shift
+    "$SCRIPT_DIR/arena.sh" "$@"
+    ;;
+  knowledge)
+    shift
+    "$SCRIPT_DIR/knowledge.sh" "$@"
+    ;;
+  cost)
+    shift
+    "$SCRIPT_DIR/cost_telemetry.sh" "$@"
+    ;;
   -h|--help|help|*)
-    echo "eng-orchestrator Control Plane v1.1"
+    echo "eng-orchestrator Control Plane v2.0 - with Arena Tournament"
     echo ""
     echo "Usage: $0 <command> [options]"
     echo ""
-    echo "Commands:"
+    echo "Core Control Plane:"
     echo "  preview [--type TYPE] [--domain DOMAIN] [--task DESC]  - Preview without mutation"
-    echo "  run create [--type TYPE] [--domain DOMAIN] [--tier TIER] [--task DESC] - Create new run"
+    echo "  run create [--type TYPE] [--domain DOMAIN] [--tier TIER] [--task DESC] - Create run"
     echo "  list - List all runs"
     echo "  show --run RUN-xxx - Show run details"
-    echo "  state {list-states|validate|transition|current|history} - State machine"
-    echo "  event {append|list|tail} - Event log"
+    echo "  state {list-states|validate|transition|current|history} - State machine (17 states)"
+    echo "  event {append|list|tail} - Event log (23+ types)"
     echo "  recover {detect|inspect|reconcile|recover|resume} --run RUN - Recovery"
-    echo "  worktree {create|remove|list|detect} --run RUN - Worktree isolation"
+    echo "  worktree {create|remove|list|detect|cleanup} --run RUN - Worktree isolation"
     echo "  receipt generate --run RUN - Generate receipt.json"
     echo "  registry {discover|inspect|validate|load|disable} - Skill registry"
-    echo "  playbook {compose|list} - Playbook engine"
+    echo "  playbook {compose|list} - Playbook engine (11 workflows + 15 domains)"
     echo "  gate <gate> [--no-run] - Gate engine (G0_Build, G1_Tests, etc.)"
+    echo "  knowledge {add|validate|promote-check|list|check} - Structured knowledge"
+    echo "  cost {record|show} --run RUN --metric NAME --value VAL - Cost telemetry"
+    echo ""
+    echo "Arena Tournament (NEW in v2.0):"
+    echo "  arena plan [--agents N|--quick] [--seed S] - Show rounds/calls/waves"
+    echo "  arena run --task \"desc\" [--agents N|--quick] [--seed S] - Full tournament"
+    echo "  arena init --run RUN --task \"desc\" [--agents N|--quick] --seed S"
+    echo "  arena next --run RUN - Drive tournament loop (spawn->attack->defend->judge)"
+    echo "  arena prompts <phase> --run RUN - Write sub-agent briefs (phase=spawn|attack|defend|judge|final)"
+    echo "  arena winner --run RUN - Champion solution + why it won"
+    echo "  arena status --run RUN - Alive/eliminated per round"
+    echo "  arena pairings --run RUN - Current round matches"
     echo ""
     echo "Examples:"
     echo "  $0 preview --type feature --task 'Add auth'"
     echo "  $0 run create --type feature --domain wordpress --tier T3 --task 'WooCommerce bulk discount'"
-    echo "  $0 state validate --from EXECUTION --to COMPLETED"
+    echo "  $0 arena run --task 'Design auth system' --quick   # 16 agents, 4 rounds, 91 calls"
+    echo "  $0 arena run --task 'Fix critical bug' --agents 100  # 100 agents, 7 rounds, 595 calls"
+    echo "  $0 arena next --run RUN-2026-000001"
     echo "  $0 receipt generate --run RUN-2026-000001"
     ;;
 esac

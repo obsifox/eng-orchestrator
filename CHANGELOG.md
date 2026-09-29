@@ -2,6 +2,43 @@
 
 All notable changes to eng-orchestrator skill.
 
+## 2.0.0 - 2026-09-29
+### Added - Arena Tournament Mode (Major Rewrite)
+- **Arena Integration:** Installed `skills/arena/` from https://github.com/Jakeschincariol/arena-skill (MIT) - bracket.py 1235 lines, strategies.json 2160 cards, rubric.md, ARENA_SKILL.md original. Integrated as escalation mode when user dissatisfied or explicitly /arena.
+- **Strategy Cards:** 15 reasoning modes (first-principles, inversion, analogy, adversarial, constraint-first, worked-example, socratic, contrarian, systems-thinking, decomposition, working-backwards, probabilistic, dialectical, evidence-first, expert-panel) x 12 workflows (draft-critique-rewrite, outline-first, test-first, research-then-synthesise, three-drafts, requirements-checklist, iterative-deepening, build-then-break, smallest-version-first, options-matrix, open-questions-first, write-then-restructure) x 12 strategies (simplest, maximal-rigour, user-empathy, edge-cases-first, speed, defensive, etc.) = 2160 distinct combos. Dealer via proper edge-coloring (Konig + de Werra), no repeats, balanced even spread.
+- **Bracket Engine:** `config/arena.yaml` + `workflows/arena.yaml` + `scripts/arena.sh` wrapper around bracket.py. State in `.eng/runs/RUN/arena/arena.json` (not .arena/ root), LATEST symlink, single JSON survives context compaction, resume via next. 100 agents = 7 rounds, 595 calls; 16 agents = 4 rounds, 91 calls; waves of 10 matching Claude Code concurrency.
+- **Tournament Phases:** spawn (N competitors write solutions) -> per round attack (2 per match, WRONG/MISSING/BREAKS/VAGUE, max 7, FATAL/MAJOR/MINOR) -> defend (2 per match, CONCEDE/REBUT + revised solution) -> judge (1 per match, rubric scoring) -> collect -> advance -> final blind check vs baseline if exists -> DONE -> winner.
+- **Rubric:** correctness 30, completeness 25, specificity 15, robustness 20, clarity 10, weighted total 0-100, fatal rule (fatal cannot beat non-fatal), tie breakers fewer standing attacks -> higher correctness -> judge choice. Mirrors bracket.py WEIGHTS and rubric.md.
+- **Control Plane Integration:** Run manager creates arena dir inside run, event log ARENA_CREATED/SPAWN_STARTED/ROUND_STARTED/CHAMPION_SELECTED, permissions competitors sandboxed to arena_dir only (worker/reviewer/verifier base), cost telemetry per agent if ENG_TELEMETRY=1, receipt includes rounds/agents/champion card/attacks survived/baseline comparison, recovery via arena.json on disk.
+- **Trigger Detection:** Explicit /arena, arena, make them compete, مسابقه بده, رقابت -> always run. Implicit that's wrong, bad answer, try again, do better, اشتباهه, دوباره, جواب بد -> ask first full vs quick vs retry. Configured in config/arena.yaml.
+- **Orchestrator Rules:** Never competes/attacks/judges, never picks winner, every sub-agent gets identical task byte-for-byte via brief, never read solutions during run, only via status/pairings/next, sub-agents only write inside arena_dir, stop on user request, suggest accept-edits mode before spawn.
+- **CLI:** `eng.sh arena {plan|run|init|next|prompts|check|pairings|collect|record|advance|status|winner|card}` + `arena.sh` wrapper. `eng.sh arena run --task "desc" --quick` full flow creates run + init + guidance.
+- **Docs:** `docs/arena/overview.md` with full integration details, prompt templates, safety.
+- **File Map v2.0:** Added skills/arena/ (4 files), config/arena.yaml, workflows/arena.yaml, scripts/arena.sh, docs/arena/overview.md. SKILL.md rewritten 94 -> ~180 lines with arena section 9, file map updated.
+
+### Changed - v2.0 Rewrite
+- **SKILL.md:** Complete rewrite v1.1.0 94 lines -> v2.0.0 ~180 lines, version 2.0.0, added arena mode section 9 with full tournament flow, strategy cards, rubric, trigger detection, orchestrator rules, file map v2.0, kept all control plane sections 0-8,10-14. Still evidence > claims, verification > self-assessment.
+- **README.md:** Updated to v2.0.0 with arena badges, description control plane + arena, quick start includes arena examples.
+- **eng.sh:** Added arena, knowledge, cost commands, updated help to show core + arena sections.
+- **.gitignore:** Already ignores .eng/runs/, added .arena/ for arena compatibility (but we use .eng/runs/RUN/arena/).
+
+### Preserved - All v1.1 Control Plane Features
+- State machine 17 states, 37 tests PASS
+- Run manager RUN-xxx isolation
+- Event log 23+ types
+- 6 agent contracts
+- Permission matrix 21 tests
+- Model routing with 3 adapter.py implementations
+- Playbook engine now 12 workflows (11 + arena) + 15 domains
+- Preview no mutation (including arena plan)
+- Recovery 8 tests
+- Worktree isolation + cleanup
+- Receipt enrichment
+- Cost telemetry
+- Knowledge promotion
+- Skill registry
+- 88 tests + 122 eval PASS maintained
+
 ## 1.1.0 - 2026-09-29
 ### Added - Architecture Gap Closure (Control Plane)
 - **State Machine:** 17 canonical states (INTAKE, BASELINE, CLASSIFICATION, PLANNING, EXECUTION, VALIDATION, REVIEW, REWORK, VERIFICATION, RELEASE_REVIEW, HUMAN_APPROVAL, COMPLETED, BLOCKED, FAILED, CANCELLED, ESCALATED, RECOVERY) with 22+ valid transitions, 7 explicit invalid, deterministic rejection via `scripts/state_machine.sh` + `config/state_machine.yaml` - 37 tests PASS

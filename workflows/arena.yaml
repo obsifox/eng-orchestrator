@@ -1,0 +1,128 @@
+name: arena
+description: Tournament mode - N sub-agents compete on same task with distinct strategy cards, single-elimination bracket until one survives
+version: 1.0
+type: arena
+extends: null
+
+# When to use this workflow
+when_to_use:
+  - User explicitly asks /arena or "make them compete"
+  - User says bad answer, try again, do better, that's wrong
+  - Previous answer failed verification and user wants stronger guarantee
+  - High-stakes task where single-shot answer insufficient
+  - Exploration of solution space needed (multiple approaches)
+
+when_not_to_use:
+  - Simple Q&A (use Tier 0)
+  - Task already has clear single solution
+  - Token budget too low (arena needs 16x-100x)
+
+# Arena workflow phases - maps to bracket.py phases but inside eng-orchestrator state machine
+phases:
+  - name: INTAKE
+    description: Parse task, detect explicit vs implicit trigger, size it
+    gates: []
+  - name: BASELINE
+    description: Write .eng/runs/RUN/arena/task.md standalone, copy baseline if exists
+    artifacts: ["arena/task.md", "arena/baseline.md"]
+  - name: CLASSIFICATION
+    description: Determine agent count (100 default, 16 quick), seed, wave size
+    outputs: ["arena.json with dealt cards"]
+  - name: PLANNING
+    description: bracket.py plan --agents N, show rounds/calls/waves
+  - name: EXECUTION
+    description: Tournament loop driven by bracket.py next
+    sub_phases:
+      - spawn: "N competitors write solutions"
+      - attack: "2 per match - find WRONG/MISSING/BREAKS/VAGUE"
+      - defend: "2 per match - CONCEDE/REBUT + revised solution"
+      - judge: "1 per match - score rubric, weighted total, fatal rule"
+      - collect: "record winners"
+      - advance: "eliminate losers, pair survivors"
+    loop: "until champion"
+  - name: VERIFICATION
+    description: Final check vs baseline if exists (blind comparison)
+  - name: COMPLETED
+    description: Winner presentation with why it won, attacks survived, card
+
+# Agent contracts for arena roles (ephemeral, extend base contracts)
+agents:
+  competitor:
+    base: worker
+    count: "{agents}"  # 100 or 16
+    inputs: ["task.md", "strategy_card"]
+    outputs: ["solution.md"]
+    permissions: "worker limited to arena_dir"
+    model_policy: "tier_based"  # each competitor can use different model per card
+    evidence_required: ["solution file exists", "word count > 0"]
+  attacker:
+    base: reviewer
+    count: "2 per match"
+    inputs: ["own_solution", "target_solution", "task.md", "strategy_card"]
+    outputs: ["attacks.md"]
+    permissions: "reviewer"
+    attack_format: "ATTACK N [FATAL|MAJOR|MINOR] title / Where / Problem"
+    max_attacks: 7
+  defender:
+    base: worker
+    count: "2 per match"
+    inputs: ["own_solution", "attacks", "task.md"]
+    outputs: ["defense.md", "revised_solution.md"]
+    format: "ATTACK N: CONCEDE|REBUT"
+  judge:
+    base: verifier
+    count: "1 per match"
+    inputs: ["revised_solutions", "attacks", "defenses", "rubric.md"]
+    outputs: ["verdict.json"]
+    scoring: "rubric weights 30/25/15/20/10, fatal rule, tie breakers"
+    must_be_blind: true
+
+# Playbook base - how arena integrates with control plane
+playbook_base:
+  mandatory_steps:
+    - "detect_env.sh"
+    - "run_manager.sh create --type arena --tier T2/T3"
+    - "Write task.md standalone (requirements, constraints, context, done criteria)"
+    - "bracket.py init --agents N --seed S --task-file task.md"
+    - "Loop: bracket.py next -> prompts <phase> -> spawn waves of 10 -> next"
+    - "bracket.py winner -> read champion solution only"
+    - "Present winner + why + rounds + baseline comparison"
+  artifacts:
+    - ".eng/runs/RUN/arena/arena.json"
+    - ".eng/runs/RUN/arena/task.md"
+    - ".eng/runs/RUN/arena/solutions/*.md"
+    - ".eng/runs/RUN/arena/attacks/*.md"
+    - ".eng/runs/RUN/arena/defenses/*.md"
+    - ".eng/runs/RUN/arena/verdicts/*.json"
+    - ".eng/runs/RUN/receipt.json with arena details"
+
+# Risk modifiers for arena
+risk_modifiers:
+  high_stakes:
+    agents: 100
+    final_check: true
+  quick_iteration:
+    agents: 16
+    wave: 10
+  budget_constrained:
+    agents: 16
+    suggest_retry_first: true
+
+# Gates for arena workflow
+gates:
+  G0_Build: "N/A - arena is reasoning tournament, not build"
+  G1_Tests: "N/A unless task is code - then champion solution must include tests"
+  G2_Lens: "rubric scoring replaces lens review"
+  G3_Security: "secret_scan on arena dir + champion solution"
+  G4_Release: "champion solution hash verified, receipt generated"
+
+# Integration with existing eng-orchestrator features
+integration:
+  state_machine: "Arena runs inside EXECUTION state, events logged to events.jsonl"
+  event_log: "ARENA_CREATED, SPAWN_STARTED, ROUND_STARTED, CHAMPION_SELECTED"
+  permissions: "Competitors sandboxed to arena_dir, enforced via permission_check.sh"
+  cost_telemetry: "track per competitor, total tokens = agents * avg"
+  receipt: "include arena rounds, agents, champion card, attacks survived"
+  knowledge: "champion card + why it won -> lesson if freq>=3"
+  preview: "preview --type arena shows rounds, calls, waves without mutation"
+  recovery: "arena.json on disk, resume via bracket.py next after compaction"

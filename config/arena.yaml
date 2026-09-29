@@ -1,0 +1,106 @@
+# Arena Tournament Config - integrated into eng-orchestrator control plane v2.0
+# Original from Jakeschincariol/arena-skill, adapted for run_manager integration
+
+version: 1.0
+enabled: true
+
+# Default tournament sizing
+defaults:
+  agents: 100          # full arena
+  quick_agents: 16     # --quick everyday setting
+  wave: 10             # sub-agents per wave (matches CLAUDE_CODE_MAX_TOOL_USE_CONCURRENCY)
+  seed: null           # random if null, deterministic if set
+
+# Card dealing: 15 reasoning x 12 workflows x 12 strategies = 2160 combos
+# Maps to eng-orchestrator playbook engine: reasoning modes extend lens selection,
+# workflows overlap with workflows/*.yaml, strategies extend risk/quality modifiers
+cards:
+  reasoning_modes: 15
+  workflows: 12
+  strategies: 12
+  total_combinations: 2160
+  balanced_dealing: true  # proper edge-coloring, no repeats, even spread
+  dealer: "skills/arena/bracket.py"
+
+# Bracket structure
+bracket:
+  phases: ["spawn", "attack", "defend", "judge", "final"]
+  calls_per_match: 5  # 2 attacks, 2 defenses, 1 judge
+  # 100 agents -> 7 rounds, 595 calls; 16 agents -> 4 rounds, 91 calls
+  single_elimination: true
+  byes: "seeded"  # balanced no-repeat dealer handles byes
+
+# Scoring rubric - mirrors skills/arena/rubric.md, must match bracket.py WEIGHTS
+rubric:
+  weights:
+    correctness: 30
+    completeness: 25
+    specificity: 15
+    robustness: 20
+    clarity: 10
+  fatal_rule: "fatal solution cannot beat non-fatal, whatever totals"
+  tie_breakers: ["fewer_standing_attacks", "higher_correctness", "judge_choice"]
+
+# Integration with eng-orchestrator control plane
+integration:
+  run_manager:
+    arena_dir: ".eng/runs/{RUN}/arena"  # instead of .arena/
+    latest_symlink: ".eng/runs/{RUN}/arena/LATEST"
+    task_file: ".eng/runs/{RUN}/arena/task.md"
+    baseline_file: ".eng/runs/{RUN}/arena/baseline.md"
+    state_file: "arena.json"
+  state_machine:
+    # Arena runs inside EXECUTION or VERIFICATION state
+    allowed_states: ["EXECUTION", "VALIDATION", "REVIEW", "VERIFICATION"]
+    events:
+      - ARENA_CREATED
+      - ARENA_SPAWN_STARTED
+      - ARENA_SPAWN_COMPLETED
+      - ARENA_ROUND_STARTED
+      - ARENA_ROUND_COMPLETED
+      - ARENA_CHAMPION_SELECTED
+      - ARENA_FINAL_CHECK
+  event_log:
+    log_arena_events: true
+  permissions:
+    # Arena competitors are ephemeral agents with restricted permissions
+    competitor_permissions: "worker"  # maps to agents/worker.yaml but with arena_dir only
+    attacker_permissions: "reviewer"
+    defender_permissions: "worker"
+    judge_permissions: "verifier"
+    # Competitors only write inside arena_dir
+    sandbox: ".eng/runs/{RUN}/arena"
+  cost_telemetry:
+    track_per_agent: true
+    metrics: ["agent_count", "model_usage", "tokens", "execution_duration"]
+
+# Trigger detection - when to suggest arena
+triggers:
+  explicit:
+    - "/arena"
+    - "arena"
+    - "make them compete"
+    - "مسابقه بده"
+    - "رقابت"
+  implicit_dissatisfaction:
+    - "that's wrong"
+    - "bad answer"
+    - "try again"
+    - "do better"
+    - "wrong answer"
+    - "اشتباهه"
+    - "دوباره"
+    - "جواب بد"
+  policy:
+    explicit_always_run: true
+    implicit_ask_first: true  # offer full (100), quick (16), or retry
+    max_auto_agents_without_confirm: 16
+
+# Safety
+safety:
+  orchestrator_never_competes: true
+  orchestrator_never_judges: true
+  never_read_solutions_during_run: true
+  subagents_only_write_inside_arena_dir: true
+  stop_on_user_request: true
+  context_compaction_safe: true  # state on disk, resume via next

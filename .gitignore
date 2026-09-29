@@ -6,6 +6,8 @@
 .eng/runs/
 .eng/evidence.md
 .eng/state.json
+# Arena - ignore generated but keep skill source
+.arena/
 # Keep templates and knowledge README
 !.eng/templates/
 !.eng/templates/*

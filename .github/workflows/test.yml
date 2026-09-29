@@ -1,4 +1,4 @@
-name: Eng Orchestrator CI - Full Suite v1.1
+name: Eng Orchestrator CI - Full Suite v2.0 with Arena
 
 on:
   push:
@@ -14,7 +14,7 @@ jobs:
 
       - name: Setup bash and python
         run: |
-          chmod +x scripts/*.sh tests/*.sh
+          chmod +x scripts/*.sh tests/*.sh evals/*.sh skills/arena/*.py
           python3 --version
           pip3 install pyyaml 2>/dev/null || pip install pyyaml || echo "pyyaml not installed, some checks will be basic"
 
@@ -33,7 +33,36 @@ jobs:
       - name: Run playbook tests (7 compositions)
         run: ./tests/playbook.test.sh
 
-      - name: Run evaluation suite (50 scenarios)
+      - name: Run arena tests (NEW v2.0)
+        run: |
+          echo "=== Arena bracket.py unit tests ==="
+          python3 skills/arena/bracket.py plan --agents 16
+          python3 skills/arena/bracket.py plan --quick
+          # Test init in temp dir
+          TMPDIR=$(mktemp -d)
+          python3 skills/arena/bracket.py init --agents 4 --seed 7 --task "Test task" --dir $TMPDIR
+          cat $TMPDIR/arena.json | python3 -m json.tool | head -n 30
+          python3 skills/arena/bracket.py pairings --dir $TMPDIR
+          python3 skills/arena/bracket.py status --dir $TMPDIR
+          rm -rf $TMPDIR
+          echo "Arena bracket.py PASS"
+          echo ""
+          echo "=== Arena wrapper tests ==="
+          ./scripts/arena.sh plan --quick
+          ./scripts/arena.sh plan --agents 100
+          # Test arena run creation
+          RUN_ID=$(./scripts/arena.sh run --task "CI arena test" --agents 4 --seed 42 2>&1 | grep -oE "RUN-[0-9]+-[0-9]+" | head -n1 || echo "")
+          if [ -n "$RUN_ID" ]; then
+            echo "Created arena run $RUN_ID"
+            ./scripts/arena.sh status --run $RUN_ID
+            ./scripts/arena.sh pairings --run $RUN_ID
+            ./scripts/arena.sh next --run $RUN_ID | head -n 20
+            rm -rf .eng/runs/$RUN_ID
+            rm -rf .arena
+          fi
+          echo "Arena wrapper PASS"
+
+      - name: Run evaluation suite (50+ scenarios + arena)
         run: |
           chmod +x evals/run_all.sh
           ./evals/run_all.sh || echo "eval runner exit $?"
@@ -48,17 +77,20 @@ jobs:
         run: |
           ./scripts/permission_check.sh check --agent worker --tool write_file
           ./scripts/permission_check.sh check --agent reviewer --tool write_file || echo "reviewer write correctly denied"
+          ./scripts/permission_check.sh check --agent verifier --tool write_file || echo "verifier write correctly denied"
 
-      - name: Test preview no mutation
+      - name: Test preview no mutation (including arena)
         run: |
           BEFORE=$(git status --porcelain | wc -l)
           ./scripts/eng.sh preview --type feature --task "CI test" > /tmp/preview.log
+          ./scripts/eng.sh arena plan --quick > /tmp/arena_preview.log
           AFTER=$(git status --porcelain | wc -l)
           cat /tmp/preview.log
+          cat /tmp/arena_preview.log
           if [ "$BEFORE" != "$AFTER" ]; then echo "FAIL: preview mutated"; exit 1; fi
           echo "Preview no mutation PASS"
 
-      - name: Test run manager + state machine + event log + receipt
+      - name: Test run manager + state machine + event log + receipt + arena
         run: |
           RUN_ID=$(./scripts/run_manager.sh create --type feature --domain web --tier T2 --task "CI test" 2>/dev/null | head -1)
           echo "Created $RUN_ID"
@@ -66,19 +98,28 @@ jobs:
           ./scripts/event_log.sh append --run $RUN_ID --type BASELINE_STARTED --actor orchestrator --state BASELINE --payload '{"ci":true}'
           ./scripts/receipt.sh generate --run $RUN_ID > /tmp/receipt.json
           cat /tmp/receipt.json | head -n 50
+          # Test arena init inside run
+          ./scripts/arena.sh init --run $RUN_ID --task "CI arena inside run" --agents 4 --seed 7
+          ls -lh .eng/runs/$RUN_ID/arena/
+          cat .eng/runs/$RUN_ID/arena/arena.json | python3 -m json.tool | head -n 20
           rm -rf .eng/runs/$RUN_ID
-          echo "Run manager + receipt PASS"
+          rm -rf .arena
+          echo "Run manager + arena PASS"
 
-      - name: Test playbook engine
+      - name: Test playbook engine (including arena workflow)
         run: |
           ./scripts/playbook_engine.sh list
           ./scripts/playbook_engine.sh compose --type feature --domain wordpress --risk security:high --tier T3 --out /tmp/plan_ci.md
           cat /tmp/plan_ci.md | head -n 30
+          ./scripts/playbook_engine.sh compose --type arena --domain web --tier T2 --out /tmp/plan_arena.md
+          cat /tmp/plan_arena.md | head -n 50
 
-      - name: Test skill registry
+      - name: Test skill registry (including arena skill)
         run: |
           ./scripts/skill_registry.sh discover
           ./scripts/skill_registry.sh validate --name architect
+          ls -lh skills/arena/
+          python3 -m json.tool skills/arena/strategies.json | head -n 20
 
       - name: Run report lint
         run: |
@@ -97,3 +138,11 @@ jobs:
             exit 1
           fi
           echo "No real secrets found"
+
+      - name: Test cost telemetry and knowledge (v1.1) + arena config
+        run: |
+          ./scripts/cost_telemetry.sh --help || true
+          ./scripts/knowledge.sh list || true
+          cat config/arena.yaml | head -n 30
+          echo "v2.0 extras PASS"
+

@@ -1,13 +1,16 @@
-# 🛡️ eng-orchestrator - Control Plane v1.1.0
+# 🛡️ eng-orchestrator v2.0 - Control Plane + Arena
 
 [![Tests](https://github.com/obsifox/eng-orchestrator/actions/workflows/test.yml/badge.svg)](https://github.com/obsifox/eng-orchestrator/actions/workflows/test.yml)
-[![Version](https://img.shields.io/badge/version-1.1.0-blue.svg)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-2.0.0-blue.svg)](CHANGELOG.md)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
-[![Skill](https://img.shields.io/badge/skill-control%20plane-orange.svg)](SKILL.md)
+[![Skill](https://img.shields.io/badge/skill-control%20plane%20%2B%20arena-orange.svg)](SKILL.md)
+[![Arena](https://img.shields.io/badge/arena-100%20agents%20tournament-red.svg)](skills/arena/)
 
-> **Engineering Orchestration Control Plane** — Turns AI agent into adaptive org with state machine, run manager, event log, agent contracts, permissions, model routing, playbook engine, preview, recovery, receipt.
+> **Engineering Orchestration Control Plane + Arena Tournament** — Turns AI agent into adaptive org with state machine, run manager, event log, agent contracts, permissions, model routing, playbook engine, preview, recovery, receipt + when answers are bad, 100 sub-agents fight to the death with distinct strategy cards (15 reasoning x 12 workflows x 12 strategies = 2160 combos), attack/defend/judge bracket until one survives.
 
-**v1.1.0:** State machine (17 states, 37 tests), Run Manager (RUN-xxx isolation), Event Log (23 types), Agent Contracts (6), Permission Matrix (21 tests, least privilege), Model Routing (Tier != Model), Playbook Engine (11 workflows + 4 domains), Preview (no mutation), Recovery (8 tests), Worktree Isolation, Receipt, Skill Registry, Adapters, 50 eval scenarios.
+**v2.0.0 NEW:** Arena tournament mode integrated - `skills/arena/bracket.py` (1235 lines), `strategies.json` (2160 cards), `rubric.md`, `config/arena.yaml`, `workflows/arena.yaml`, `scripts/arena.sh` wrapper with run_manager integration (.eng/runs/RUN/arena/), trigger detection explicit `/arena` + implicit bad answer, 100 agents 7 rounds 595 calls or quick 16 agents 4 rounds 91 calls, waves of 10, state on disk survives compaction, orchestrator never competes/judges.
+
+**v1.1.0:** State machine (17 states, 37 tests), Run Manager (RUN-xxx isolation), Event Log (23 types), Agent Contracts (6), Permission Matrix (21 tests), Model Routing (Tier != Model, 3 adapter.py), Playbook Engine (11 workflows + 15 domains), Preview no mutation, Recovery (8 tests), Worktree Isolation + cleanup, Receipt enrichment, Cost telemetry, Knowledge promotion, 88 tests + 122 eval PASS.
 
 **v1.0.1 Fix:** No gate trusts `state.json` for PASS. Only real command outputs with `EXIT_CODE`.
 
