@@ -123,8 +123,9 @@ allowed_hit() {
   done
 
   if [ -n "$ALLOW_FILE" ] && [ -f "$ALLOW_FILE" ]; then
-    echo "Ignoring patterns documented in $ALLOW_FILE ($(grep -c '|' "$ALLOW_FILE" 2>/dev/null || echo 0) entr(y/ies), $ALLOWED_HITS applied):"
+    echo "Allow file (reproduced in full so the log can be audited): $ALLOW_FILE"
     grep '|' "$ALLOW_FILE" 2>/dev/null | sed 's/^/  - /' || true
+    echo "  hits allowed by it: $ALLOWED_HITS"
     echo ""
   fi
 

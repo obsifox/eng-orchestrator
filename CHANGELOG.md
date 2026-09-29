@@ -10,6 +10,7 @@ All notable changes to eng-orchestrator skill.
 - **Secret-scan allow list:** `secret_scan.sh --allow <file>` (default `.eng/secret_scan.allow`), entries `pattern | path-substring | reason`. Both the path and the reason are mandatory: an allowance without a reason is ignored and reported (`ALLOWANCE IGNORED`), and a hit outside the allowed path stays a finding. Every applied allowance is printed in the log with its reason and counted in the summary.
 - **Templates and examples:** `.eng/templates/project.yaml`, `examples/project.yaml`.
 - **Docs:** `docs/architecture/project-profile.md` (format, resolution order, gate semantics, allow-list rules).
+- **Scan log transparency:** the allow file is reproduced in full in the scan log (rules included) together with the number of hits it allowed, so the log can be audited on its own.
 - **Tests:** `tests/project_profile.test.sh` - 17 asserts covering profile parsing (valid, malformed, empty, missing), detection order (profile wins, PHP fallback, Node unchanged), G5 semantics (pass, fail, not applicable, no-run), and the allow list (documented occurrence passes, undocumented fails, reasonless allowance ignored). Total: 105 asserts across 6 suites.
 
 ### Changed
