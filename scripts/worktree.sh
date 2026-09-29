@@ -115,10 +115,68 @@ detect_conflicts() {
   fi
 }
 
+cleanup() {
+  local older_than="7d" dry_run=0
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --older-than) older_than="$2"; shift 2 ;;
+      --dry-run) dry_run=1; shift ;;
+      *) shift ;;
+    esac
+  done
+
+  echo "Cleaning up old worktrees older than $older_than (dry_run=$dry_run)..."
+  local runs_dir="$REPO_ROOT/.eng/runs"
+  if [ ! -d "$runs_dir" ]; then echo "No runs dir"; return 0; fi
+
+  # Find runs in terminal states and older than threshold
+  for run_dir in "$runs_dir"/RUN-*; do
+    if [ ! -d "$run_dir" ]; then continue; fi
+    local run_id
+    run_id=$(basename "$run_dir")
+    local state_file="$run_dir/state.json"
+    if [ ! -f "$state_file" ]; then continue; fi
+    local current_state
+    current_state=$("$SCRIPT_DIR/state_machine.sh" current --run "$run_id" 2>/dev/null || echo "UNKNOWN")
+
+    case "$current_state" in
+      COMPLETED|FAILED|CANCELLED|BLOCKED)
+        # Check age via find -mtime
+        # Parse older_than: e.g. 7d -> 7 days
+        local days
+        days=$(echo "$older_than" | sed 's/d//')
+        if [ -z "$days" ]; then days=7; fi
+        if find "$run_dir" -maxdepth 0 -mtime +"$days" | grep -q .; then
+          echo "  Found old terminal run: $run_id - state $current_state - older than $older_than"
+          if [ $dry_run -eq 1 ]; then
+            echo "    [dry-run] Would cleanup worktree for $run_id"
+          else
+            echo "    Cleaning up worktree for $run_id"
+            remove_worktree --run "$run_id" || true
+            # Optionally keep receipt.json and manifest.json, remove artifacts/checkpoints
+            # For retention policy, we keep receipt and manifest, remove worktree and checkpoints older than threshold
+            if [ -d "$run_dir/checkpoints" ]; then
+              echo "    Removing old checkpoints for $run_id"
+              rm -rf "$run_dir/checkpoints"
+            fi
+          fi
+        else
+          echo "  Skipping recent run: $run_id - state $current_state"
+        fi
+        ;;
+      *)
+        echo "  Skipping non-terminal run: $run_id - state $current_state"
+        ;;
+    esac
+  done
+  echo "Cleanup completed"
+}
+
 case "${1:-}" in
   create) shift; create_worktree "$@" ;;
   remove) shift; remove_worktree "$@" ;;
   list) list_worktrees ;;
   detect) detect_conflicts ;;
-  -h|--help|help|*) echo "Usage: $0 {create --run RUN [--branch NAME]|remove --run RUN|list|detect}" ;;
+  cleanup) shift; cleanup "$@" ;;
+  -h|--help|help|*) echo "Usage: $0 {create --run RUN [--branch NAME]|remove --run RUN|list|detect|cleanup --older-than 7d [--dry-run]}" ;;
 esac

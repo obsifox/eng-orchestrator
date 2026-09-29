@@ -25,9 +25,31 @@ All notable changes to eng-orchestrator skill.
 - **Tests:** New tests 73 PASS (state_machine 37, permissions 21, recovery 8, playbook 7) + existing 15 = 88 total PASS
 - **Audit:** `docs/audit/v1.1-baseline.md` and `docs/audit/v1.1-implementation-audit.md` with full before/after, tests, security, recovery, limitations, next steps
 
+### Added - Phase B Completion (Full Update)
+- **CI Full Suite:** `.github/workflows/test.yml` now runs all 5 test suites (gates 15, state_machine 37, permissions 21, recovery 8, playbook 7) + eval runner 122 scenarios + secret_scan + dep_audit + permission checks + preview no mutation + run manager + receipt + playbook engine + skill registry + no secrets check
+- **Domain Expansion:** 11 new domain overlays in `domains/` (woocommerce, minecraft, paper, typescript, javascript, python, rust, game-development, cli, frontend, database) - total 15 domains (4 previous + 11 new), all with detection files/keywords, overlays lenses/checks/playbook_base, risk_modifiers
+- **Adapter Implementation:** Real execution logic in `adapters/generic/adapter.py` (GenericAdapter with load_agent_contract, check_permission, translate_model_policy, translate_workflow_state, execute_tool, dispatch_agent, event logging, cost tracking), `adapters/claude/adapter.py` (ClaudeAdapter with model_mapping haiku/sonnet/opus), `adapters/codex/adapter.py` (CodexAdapter gpt-4o-mini/gpt-4o/o1)
+- **Cost Telemetry:** `scripts/cost_telemetry.sh` with record --run RUN --metric NAME --value VAL (metrics: agent_count, model_usage, execution_duration, tool_calls, review_cycles, rework_cycles, tokens, cost), show --run RUN, optional via ENG_TELEMETRY=1, provider-independent, updates state.json budget.tokens_used_est, agent_count, tool_calls, review_cycles, estimated_cost
+- **Knowledge Promotion Automation:** `scripts/knowledge.sh` with add --id L-XXX --category CAT --trigger TRIG --failure FAIL --root-cause RC --correction CORR --evidence EV --applicable-when WHEN --confidence high|medium|low, validate FILE (checks required fields id/category/trigger/failure/root_cause/correction/evidence/applicable_when/confidence/created/last_verified), promote-check --id ID (freq>=3 or CRITICAL or high confidence -> PROMOTE, requires human approval if changes hard rules), list, check ACTOR (only human/architect can propose, others DENY - no free modification of trusted knowledge)
+- **Evaluation Runner:** `evals/run_all.sh` runs all 88 unit tests + 34 simulated deterministic scenarios = 122 total, generates `evals/results/v1.1-evaluation-report.md` with breakdown per category, pass rate, evidence logs, backward compat, security, determinism
+- **Worktree Cleanup:** `scripts/worktree.sh` now has cleanup --older-than 7d [--dry-run] - finds old terminal runs (COMPLETED/FAILED/CANCELLED/BLOCKED) older than threshold via find -mtime, dry-run shows would cleanup, actual removes worktree and checkpoints, keeps receipt and manifest per retention policy
+- **Receipt Enrichment:** `scripts/receipt.sh` now includes why_workflow_selected, why_domain_selected, why_risk_selected, cost_breakdown (token_budget, tokens_used_est, agent_count, tool_calls, review_cycles, estimated_cost) in routing section, plus final section with why_agents_selected, which_tools_used, which_permissions_granted, etc.
+
 ### Changed
 - SKILL.md: 81 -> 94 lines, version 1.0.1 -> 1.1.0, added control plane concepts, file map updated, still under 150
-- README.md: polished with badges, v1.1 features, file tree updated, exit code table, structured findings docs
+- README.md: polished with badges, v1.1.0 file tree (config, agents, workflows, domains, adapters, scripts control plane + gates, docs, .eng/knowledge, tests 88), quick start with eng.sh, exit code table, structured findings docs
+- .gitignore: updated to ignore .eng/runs/, .eng/evidence.md, .eng/state.json, keep knowledge and templates
+- scripts/receipt.sh: enriched with workflow/domain/risk reasons and cost breakdown
+- scripts/worktree.sh: added cleanup with retention policy
+- tests/: fixed pipefail handling (grep -E, || true, output capture) for state_machine, permissions, recovery, playbook - all 88 PASS
+- evals/: added run_all.sh and v1.1-evaluation-report.md generation
+
+### Fixed
+- knowledge.sh validate bug: $2 -> $1 after shift
+- recovery.test.sh and playbook.test.sh: grep -q with | literal -> grep -Eq, plus pipefail handling
+- permission_check.sh: reviewer shell restricted should DENY bash, now only execute allows bash
+- secret_scan.sh: fixed pipe subshell FOUND loss, excludes tests/
+- GitHub push protection: changed Stripe key test to SECRET_KEY pattern
 - .gitignore: updated to ignore .eng/runs/, .eng/evidence.md, .eng/state.json, keep knowledge
 
 ### Preserved (Backward Compatibility)

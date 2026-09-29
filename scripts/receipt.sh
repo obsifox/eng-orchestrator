@@ -93,9 +93,20 @@ receipt={
   "routing": {
     "tier": manifest.get('project',{}).get('tier','unknown') or state.get('project',{}).get('tier','unknown'),
     "workflow": manifest.get('project',{}).get('workflow','unknown'),
+    "domain": manifest.get('project',{}).get('domain','unknown'),
     "risk": state.get('risk',{}),
-    "why_tier_selected": state.get('tier_reason','heuristic or explicit'),
-    "why_workflow_selected": f"Workflow {manifest.get('project',{}).get('workflow','unknown')} selected based on task type",
+    "why_tier_selected": state.get('tier_reason','heuristic based on LOC, risk, complexity, or explicit'),
+    "why_workflow_selected": f"Workflow {manifest.get('project',{}).get('workflow','unknown')} selected based on task type (feature, bug-fix, refactor, etc.) per workflows/*.yaml",
+    "why_domain_selected": f"Domain {manifest.get('project',{}).get('domain','unknown')} detected via files/keywords per domains/*.yaml (e.g. package.json->web, AndroidManifest.xml->android, wp-config.php->wordpress)",
+    "why_risk_selected": f"Risk {state.get('risk',{})} based on task keywords (auth->security high, data->data high)",
+    "cost_breakdown": {
+      "token_budget": state.get('budget',{}).get('token_budget',0),
+      "tokens_used_est": state.get('budget',{}).get('tokens_used_est',0),
+      "agent_count": state.get('budget',{}).get('agent_count',0),
+      "tool_calls": state.get('budget',{}).get('tool_calls',0),
+      "review_cycles": state.get('budget',{}).get('review_cycles',0) or state.get('rework_cycles',0),
+      "estimated_cost": state.get('budget',{}).get('estimated_cost','unknown - optional telemetry')
+    }
   },
   "agents": [
     {
