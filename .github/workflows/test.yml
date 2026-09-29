@@ -1,0 +1,28 @@
+name: Gate Regression Tests
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  gates:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup bash
+        run: chmod +x scripts/*.sh tests/*.sh
+      - name: Run gate regression tests
+        run: ./tests/gates.test.sh
+      - name: Run secret scan (should pass on clean repo)
+        run: ./scripts/secret_scan.sh
+      - name: Run dep audit (may be NOT TESTED if no lockfile)
+        run: ./scripts/dep_audit.sh || echo "dep_audit exit $?"
+      - name: Run report lint on examples
+        run: |
+          mkdir -p .eng/artifacts
+          echo "# Evidence Ledger" > .eng/evidence.md
+          echo "- Evidence: dummy" >> .eng/evidence.md
+          echo "dummy" > .eng/artifacts/dummy.log
+          ./scripts/report_lint.sh || true

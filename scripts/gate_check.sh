@@ -1,172 +1,252 @@
 #!/usr/bin/env bash
-# gate_check.sh - Executable gate checker
-# Usage: ./scripts/gate_check.sh <gate> [--state .eng/state.json] [--evidence .eng/evidence.md]
+# gate_check.sh - Executable gate checker v1.0.1
+# Fix: No gate reads state.json for PASS. Only real command outputs.
+# Usage: ./scripts/gate_check.sh <gate> [--no-run] [--state .eng/state.json] [--evidence .eng/evidence.md]
 # Gates: G0_Build, G1_Tests, G2_Lens, G3_Security, G4_Release, architecture, lens, security, release, all
+# Flags: --no-run = do not re-execute build/test, only inspect existing logs (for testing)
 # Exit codes: 0 PASS, 1 FAIL, 2 NOT TESTED, 3 NOT APPLICABLE, 4 error
 set -uo pipefail
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=lib_run.sh
+source "$SCRIPT_DIR/lib_run.sh"
 
 GATE="${1:-all}"
 STATE_FILE=".eng/state.json"
 EVIDENCE_FILE=".eng/evidence.md"
+NO_RUN=0
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --state) STATE_FILE="$2"; shift 2 ;;
     --evidence) EVIDENCE_FILE="$2"; shift 2 ;;
+    --no-run) NO_RUN=1; shift ;;
     -h|--help)
-      echo "Usage: $0 <gate> [--state <json>] [--evidence <md>]"
+      echo "Usage: $0 <gate> [--no-run] [--state <json>] [--evidence <md>]"
       echo "Gates: G0_Build, G1_Tests, G2_Lens, G3_Security, G4_Release, all"
+      echo "  --no-run: skip re-execution, only inspect logs (useful for tests)"
       echo "Exit 0 PASS, 1 FAIL, 2 NOT TESTED, 3 NOT_APPLICABLE"
+      echo ""
+      echo "Rule: No gate reads state.json for PASS. Only real command outputs."
       exit 0
       ;;
-    *) 
+    *)
       if [[ "$1" != --* ]]; then GATE="$1"; fi
       shift
       ;;
   esac
 done
 
-check_file_exists() {
-  if [ ! -f "$1" ]; then
-    echo "Missing file: $1 -> NOT TESTED"
-    return 2
-  fi
-  return 0
-}
-
 check_gate() {
   local g="$1"
   case "$g" in
     G0_Build|build)
       echo "Checking G0 Build..."
-      if [ -f .eng/artifacts/baseline.log ]; then
-        if grep -q "BUILD_EXIT:" .eng/artifacts/baseline.log; then
-          echo "FAIL: baseline build failed"
-          return 1
-        fi
-      fi
-      # Look for latest build log
-      if ls .eng/artifacts/*build*.log >/dev/null 2>&1; then
-        echo "Build logs found"
-      fi
-      if [ -f "$STATE_FILE" ]; then
-        if command -v python3 >/dev/null 2>&1; then
-          python3 - <<PY
-import json
-with open("$STATE_FILE") as f:
-  d=json.load(f)
-g=d.get('gates',{}).get('G0_Build','NOT_TESTED')
-print(f"State G0_Build={g}")
-exit(0 if g=='PASS' else 1 if g=='FAIL' else 2 if g=='NOT_TESTED' else 3)
-PY
-          return $?
-        fi
-      fi
-      echo "PASS if evidence exists"
-      if [ -f "$EVIDENCE_FILE" ] && grep -q "G0\|Build" "$EVIDENCE_FILE"; then
-        echo "Evidence found"
-        return 0
-      else
-        echo "NOT TESTED - no evidence"
-        return 2
-      fi
-      ;;
-    G1_Tests|tests)
-      echo "Checking G1 Tests..."
-      if [ -f .eng/artifacts/baseline.log ]; then
-        # Compare logic simplified: if baseline had failures, check current
-        echo "Baseline exists, checking for new failures"
-      fi
-      if ls .eng/artifacts/*test*.log .eng/artifacts/baseline.log >/dev/null 2>&1; then
-        if grep -q "FAIL\|Error" .eng/artifacts/*test*.log 2>/dev/null; then
-          echo "Test logs show failures - checking if new"
-          # Simplified: if any fail, mark FAIL unless baseline also failed
-          return 1
-        fi
-        echo "PASS - test logs clean"
-        return 0
-      else
-        echo "NOT TESTED - no test logs"
-        return 2
-      fi
-      ;;
-    G2_Lens|lens|architecture)
-      echo "Checking G2 Lens / Architecture..."
-      if ls .eng/artifacts/*review*.md >/dev/null 2>&1; then
-        if grep -R -i "CRITICAL.*OPEN\|HIGH.*OPEN" .eng/artifacts/*review*.md 2>/dev/null; then
-          echo "FAIL: open HIGH/CRITICAL findings"
-          return 1
-        else
-          echo "PASS: no open HIGH/CRITICAL"
-          return 0
-        fi
-      else
-        echo "NOT TESTED - no review files"
-        return 2
-      fi
-      ;;
-    G3_Security|security)
-      echo "Checking G3 Security..."
-      local secret_exit=0
-      if [ -f .eng/artifacts/secret_scan.log ]; then
-        if grep -q "RESULT: FAIL" .eng/artifacts/secret_scan.log; then
-          echo "FAIL: secret scan found secrets"
-          return 1
-        fi
-      else
-        echo "No secret scan log -> NOT TESTED"
-        secret_exit=2
-      fi
-      if [ -f .eng/artifacts/dep_audit.log ]; then
-        if grep -q "RESULT: FAIL" .eng/artifacts/dep_audit.log; then
-          echo "FAIL: dep audit HIGH"
-          return 1
-        fi
-      fi
-      if [ $secret_exit -eq 2 ]; then return 2; fi
-      echo "PASS"
-      return 0
-      ;;
-    G4_Release|release)
-      echo "Checking G4 Release..."
-      if [ -f .eng/artifacts/release-review.md ]; then
-        if grep -q "sha256" .eng/artifacts/release-review.md; then
-          echo "PASS - release artifact hashed"
-          return 0
-        else
-          echo "FAIL - no hash"
-          return 1
-        fi
-      else
-        # Check if release needed
-        if [ -f "$STATE_FILE" ]; then
-          if command -v python3 >/dev/null 2>&1; then
-            python3 - <<PY
-import json
-with open("$STATE_FILE") as f:
-  d=json.load(f)
-g=d.get('gates',{}).get('G4_Release','NOT_APPLICABLE')
-print(g)
-PY
-          fi
-        fi
-        echo "NOT APPLICABLE or NOT TESTED - no release-review"
+      detect_cmds
+      if [ -z "${BUILD_CMD:-}" ]; then
+        echo "no build command detected -> NOT APPLICABLE"
         return 3
       fi
+      if [ "$NO_RUN" -eq 0 ]; then
+        echo "Running current build: $BUILD_CMD"
+        run_step current build bash -c "$BUILD_CMD"
+      else
+        echo "--no-run: skipping build execution"
+      fi
+      local cur
+      cur=$(get_exit .eng/artifacts/current_build.log)
+      if [ -z "$cur" ]; then
+        echo "no build log .eng/artifacts/current_build.log -> NOT TESTED"
+        return 2
+      fi
+      echo "Build exit code: $cur (log: .eng/artifacts/current_build.log)"
+      if [ "$cur" = 0 ]; then
+        echo "PASS"
+        return 0
+      else
+        echo "FAIL: build exit=$cur"
+        return 1
+      fi
       ;;
+
+    G1_Tests|tests)
+      echo "Checking G1 Tests..."
+      detect_cmds
+      if [ -z "${TEST_CMD:-}" ]; then
+        echo "no test runner detected -> NOT TESTED"
+        return 2
+      fi
+      if [ "$NO_RUN" -eq 0 ]; then
+        echo "Running current test: $TEST_CMD"
+        run_step current test bash -c "$TEST_CMD"
+      else
+        echo "--no-run: skipping test execution"
+      fi
+      local cur base
+      cur=$(get_exit .eng/artifacts/current_test.log)
+      base=$(get_exit .eng/artifacts/baseline_test.log)
+      if [ -z "$cur" ]; then
+        echo "no current test log -> NOT TESTED"
+        return 2
+      fi
+      echo "Current test exit: $cur, Baseline exit: ${base:-unknown}"
+      if [ "$cur" = 0 ]; then
+        echo "PASS - current tests pass"
+        return 0
+      fi
+      # If baseline passed but now fails -> regression FAIL
+      if [ "${base:-}" = 0 ]; then
+        echo "FAIL: regression (baseline passed exit 0, now exit=$cur)"
+        return 1
+      fi
+      # If baseline also failing, we cannot prove "no new failures" without count parsing
+      # So FAIL with message indicating ambiguous
+      echo "FAIL: tests failing (baseline exit=${base:-unknown}, current exit=$cur) - cannot prove no new failures"
+      return 1
+      ;;
+
+    G2_Lens|lens|architecture)
+      echo "Checking G2 Lens / Architecture..."
+      shopt -s nullglob
+      local files=(.eng/artifacts/*review*.md)
+      shopt -u nullglob
+      if [ ${#files[@]} -eq 0 ]; then
+        echo "no review files .eng/artifacts/*review*.md -> NOT TESTED"
+        return 2
+      fi
+      echo "Review files: ${files[*]}"
+      # Structured format: - [F-001] severity=HIGH status=OPEN | description
+      # Order independent, case-insensitive for values
+      local open_findings
+      open_findings=$(cat "${files[@]}" | grep -E '^\s*-\s*\[F-[0-9]+\]' | grep -iE 'severity=(high|critical)\b' | grep -iE 'status=open\b' || true)
+      if [ -n "$open_findings" ]; then
+        echo "Found open HIGH/CRITICAL findings:"
+        echo "$open_findings"
+        echo "FAIL: open HIGH/CRITICAL"
+        return 1
+      fi
+      echo "PASS: no open HIGH/CRITICAL findings (structured format)"
+      return 0
+      ;;
+
+    G3_Security|security)
+      echo "Checking G3 Security..."
+      local secret_log=".eng/artifacts/secret_scan.log"
+      local dep_log=".eng/artifacts/dep_audit.log"
+      local missing=0
+      local not_tested=0
+
+      if [ ! -f "$secret_log" ]; then
+        echo "secret_scan.log missing -> NOT TESTED"
+        missing=1
+      else
+        if grep -q 'RESULT: FAIL' "$secret_log"; then
+          echo "FAIL: secret_scan found secrets"
+          cat "$secret_log" | tail -n 20
+          return 1
+        fi
+        if grep -q 'RESULT: NOT TESTED' "$secret_log"; then
+          echo "secret_scan NOT TESTED"
+          not_tested=1
+        fi
+        if grep -q 'RESULT: NOT APPLICABLE' "$secret_log"; then
+          echo "secret_scan NOT APPLICABLE (ok)"
+        fi
+      fi
+
+      if [ ! -f "$dep_log" ]; then
+        echo "dep_audit.log missing -> NOT TESTED"
+        missing=1
+      else
+        if grep -q 'RESULT: FAIL' "$dep_log"; then
+          echo "FAIL: dep_audit HIGH vuln"
+          cat "$dep_log" | tail -n 20
+          return 1
+        fi
+        if grep -q 'RESULT: NOT TESTED' "$dep_log"; then
+          echo "dep_audit NOT TESTED"
+          not_tested=1
+        fi
+        if grep -q 'RESULT: NOT APPLICABLE' "$dep_log"; then
+          echo "dep_audit NOT APPLICABLE (ok - no deps)"
+        fi
+      fi
+
+      if [ $missing -eq 1 ]; then
+        echo "G3 -> NOT TESTED (missing logs)"
+        return 2
+      fi
+      if [ $not_tested -eq 1 ]; then
+        echo "G3 -> NOT TESTED (one of scans NOT TESTED)"
+        return 2
+      fi
+      echo "PASS - security scans clean"
+      return 0
+      ;;
+
+    G4_Release|release)
+      echo "Checking G4 Release..."
+      local release_review=".eng/artifacts/release-review.md"
+      if [ ! -f "$release_review" ]; then
+        echo "No release-review.md -> checking if release needed"
+        if [ -f "$STATE_FILE" ] && command -v python3 >/dev/null 2>&1; then
+          local gate_val
+          gate_val=$(python3 -c "import json; d=json.load(open('$STATE_FILE')); print(d.get('gates',{}).get('G4_Release','NOT_APPLICABLE'))" 2>/dev/null || echo "NOT_APPLICABLE")
+          echo "State G4_Release=$gate_val"
+          if [ "$gate_val" = "NOT_APPLICABLE" ]; then
+            echo "NOT APPLICABLE"
+            return 3
+          fi
+        fi
+        echo "NOT TESTED - no release-review"
+        return 2
+      fi
+      # Check for real checksum calculation, not just string presence
+      if grep -qE 'sha256:[a-f0-9]{64}' "$release_review" || grep -qE 'SHA256.*[a-f0-9]{64}' "$release_review" -i; then
+        # Optionally verify checksum file exists and matches
+        local artifact_path
+        artifact_path=$(grep -oE 'artifact:.*' "$release_review" | head -1 | awk '{print $2}' || true)
+        if [ -n "$artifact_path" ] && [ -f "$artifact_path" ]; then
+          local expected actual
+          expected=$(grep -oE '[a-f0-9]{64}' "$release_review" | head -1)
+          actual=$(file_sha256 "$artifact_path")
+          if [ "$expected" = "$actual" ]; then
+            echo "PASS - release artifact $artifact_path hash verified $actual"
+            return 0
+          else
+            echo "FAIL - hash mismatch expected $expected actual $actual"
+            return 1
+          fi
+        else
+          echo "PASS - release review contains sha256 hash (artifact path not verifiable, but hash present)"
+          return 0
+        fi
+      else
+        echo "FAIL - no valid sha256 hash in release-review"
+        return 1
+      fi
+      ;;
+
     all)
       echo "Checking all gates..."
       local overall=0
+      local results=()
       for gate in G0_Build G1_Tests G2_Lens G3_Security G4_Release; do
         echo "--- $gate ---"
         check_gate "$gate"
-        ec=$?
+        local ec=$?
         echo "Result $gate: $ec"
+        results+=("$gate:$ec")
         if [ $ec -eq 1 ]; then overall=1; fi
         if [ $ec -eq 2 ] && [ $overall -eq 0 ]; then overall=2; fi
+        if [ $ec -eq 3 ] && [ $overall -eq 0 ]; then
+          # NOT APPLICABLE does not make overall NOT TESTED unless all are NA
+          :
+        fi
       done
+      echo "All gates summary: ${results[*]} -> overall $overall"
       return $overall
       ;;
+
     *)
       echo "Unknown gate: $g"
       return 4

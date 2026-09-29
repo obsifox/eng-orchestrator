@@ -14,16 +14,21 @@ Tier 2+ OR any task with cross-module dependencies, new patterns, or >3 files.
 
 ## Expected Output
 - `decisions.md` entry ADR-N with Context/Problem/Options/Chosen/Trade-offs
-- Review file `.eng/artifacts/arch-review.md` with:
-  - Findings list (CRITICAL/HIGH/MED/LOW) or explicit "Checked: ... - clean"
+- Review file `.eng/artifacts/arch-review.md` with structured findings:
+  ```
+  - [F-001] severity=HIGH status=OPEN | Circular dependency between A and B
+  - [F-002] severity=LOW status=CLOSED | Renamed module per ADR-2
+  ```
+  Format: `- [F-XXX] severity=... status=OPEN|CLOSED | description`
+  If clean, explicitly list checked: "Checked: file1, file2, task graph - clean"
   - Verdict: PASS / FAIL
 
 ## Tools
 - Read existing code, docs
-- `scripts/gate_check.sh architecture`
+- `scripts/gate_check.sh architecture --no-run` (after review files created)
 
 ## Anti-Sycophancy
 Must list concrete files checked. Cannot say "architecture looks good" without file refs.
 
 ## Gate Condition
-No open CRITICAL/HIGH architecture findings AND decisions.md exists for Tier2+.
+No open CRITICAL/HIGH findings in structured format AND decisions.md exists for Tier2+.

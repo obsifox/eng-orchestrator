@@ -24,18 +24,18 @@ After each project, agent records recurring mistakes to improve skill over time.
 - Must have evidence: link to 3 evidence.md files showing same issue
 - User approval required for promotion if changes SKILL.md hard rules
 
-## Examples
-## L-001 - Forgetting baseline before change
+## EXAMPLE (fictional) - Do not count as real lesson
+## L-001 - EXAMPLE (fictional): Forgetting baseline before change
 - Date: 2026-09-20
-- Project: api-refactor
+- Project: api-refactor-example
 - Tier: 2
 - Failure Mode: Context Drift / Regression not detected
 - What happened: Changed DB layer without baseline tests, broke existing flow
 - Root cause: Skipped baseline.sh
-- Mitigation: Enforced baseline as mandatory gate G0
+- Mitigation: Enforced baseline.sh as mandatory pre-step before G0 Build (G0 = Build, not baseline itself)
 - Frequency: 2
-- Proposed: Make baseline.sh fail gate if not run
-- Status: PROMOTED in v1.0.0
+- Proposed: Make gate_check.sh fail G0 if baseline_build.log missing
+- Status: PROMOTED in v1.0.0 - baseline.sh now creates baseline_build.log with EXIT_CODE
 
 ## Current Lessons
-- (Add new lessons after each project)
+- (Add new lessons after each project below this line)

@@ -1,7 +1,18 @@
-# .eng artifacts
+# .eng artifacts - ignore generated logs but keep templates
 .eng/artifacts/
+!.eng/artifacts/.gitkeep
 .eng/checkpoint/
 .eng/.persist_test_*
-
+# Keep templates
 !.eng/templates/
 !.eng/templates/*
+# OS
+.DS_Store
+# Node
+node_modules/
+# Python
+__pycache__/
+.venv/
+# Logs
+*.log
+!.eng/templates/*.md

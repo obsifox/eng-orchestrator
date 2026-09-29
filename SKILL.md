@@ -8,10 +8,14 @@ description: >
   pure Q&A / research without code change, chatting, simple text rewrite.
   Persian triggers: "اینو بیلد کن"، "پروژه رو مهندسی کن"، "از صفر بساز"،
   "مهندسی حرفه‌ای"، "تیم مهندسی بساز"، "ارکستراسیون کن".
-version: 1.0.0
+version: 1.0.1
 ---
 
 # eng-orchestrator - Mother Skill
+
+> v1.0.1 - Gate hardening: no gate trusts state.json, only real command logs with EXIT_CODE. See CHANGELOG.
+
+
 
 ## Core Principle
 Smallest effective team for this specific project. Roles are lenses (checklists), not personas. Subagents only for independent verification and file-disjoint parallel work.

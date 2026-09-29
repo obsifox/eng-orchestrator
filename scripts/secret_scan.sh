@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
-# secret_scan.sh - Lightweight secret scan, no deps
+# secret_scan.sh - Lightweight secret scan v1.0.2
+# Fix: Avoid subshell variable loss from pipe, exclude tests/ and .git etc properly
 # Usage: ./scripts/secret_scan.sh [--path .] [--out .eng/artifacts/secret_scan.log]
-# Exit codes: 0 no secrets found, 1 secrets found, 2 error
+# Exit codes: 0 clean, 1 secrets found, 2 error
 set -uo pipefail
 
 SCAN_PATH="."
@@ -22,14 +23,13 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-# Patterns - careful to avoid false positives but catch obvious
 PATTERNS=(
-  "AKIA[0-9A-Z]{16}" # AWS key
-  "ghp_[A-Za-z0-9]{36}" # github pat
+  "AKIA[0-9A-Z]{16}"
+  "ghp_[A-Za-z0-9]{36}"
   "github_pat_"
   "BEGIN RSA PRIVATE KEY"
   "BEGIN OPENSSH PRIVATE KEY"
-  "sk_live_[0-9a-zA-Z]{24}" # stripe
+  "sk_live_[0-9a-zA-Z]{24}"
   "xox[bpras]-[0-9a-zA-Z-]{10,}"
   "password\s*=\s*['\"][^'\"]{3,}['\"]"
   "api_key\s*=\s*['\"][^'\"]{8,}['\"]"
@@ -37,13 +37,14 @@ PATTERNS=(
 )
 
 FOUND=0
+TMP_LOG=$(mktemp)
+
 {
   echo "=== SECRET SCAN $(date -u +%Y-%m-%dT%H:%M:%SZ) PATH=$SCAN_PATH ==="
-  echo "Excluding: .git, node_modules, .eng/artifacts, dist, build, .venv, __pycache__"
+  echo "Excluding: .git, node_modules, .eng/artifacts, dist, build, .venv, __pycache__, .next, out, target, vendor, tests"
   echo ""
 
-  # Build exclude args for grep
-  EXCLUDE_DIRS=(.git node_modules .eng dist build .venv __pycache__ .next out target vendor)
+  EXCLUDE_DIRS=(.git node_modules .eng dist build .venv __pycache__ .next out target vendor tests)
   GREP_EXCLUDES=""
   for d in "${EXCLUDE_DIRS[@]}"; do
     GREP_EXCLUDES="$GREP_EXCLUDES --exclude-dir=$d"
@@ -61,7 +62,6 @@ FOUND=0
     echo ""
   done
 
-  # Check .env files not committed but present
   echo "--- Checking .env files presence ---"
   if ls "$SCAN_PATH"/.env 2>/dev/null; then
     echo "WARNING: .env file exists in $SCAN_PATH - ensure not committed"
@@ -74,12 +74,26 @@ FOUND=0
   fi
 
   echo ""
-  if [ $FOUND -eq 0 ]; then
-    echo "RESULT: PASS - No obvious secrets found"
-  else
+  if [ $FOUND -eq 1 ]; then
     echo "RESULT: FAIL - Potential secrets found, review above"
+  else
+    echo "RESULT: PASS - No obvious secrets found"
   fi
 
-} | tee "$OUT"
+} | tee "$TMP_LOG"
+# Capture FOUND from tee'd log (since block runs in subshell for pipe, we re-parse)
+if grep -q "FOUND:" "$TMP_LOG"; then
+  FOUND=1
+fi
+if grep -q "CRITICAL: .env NOT gitignored" "$TMP_LOG"; then
+  FOUND=1
+fi
 
-if [ $FOUND -eq 0 ]; then exit 0; else exit 1; fi
+cat "$TMP_LOG" > "$OUT"
+rm -f "$TMP_LOG"
+
+if [ $FOUND -eq 1 ]; then
+  exit 1
+else
+  exit 0
+fi

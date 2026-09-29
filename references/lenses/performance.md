@@ -16,7 +16,7 @@ Tier 2+ if user mentions performance, or handling large data, loops, DB queries,
 - `.eng/artifacts/perf-review.md`:
   - What was measured (command, data size)
   - Results: latency, memory, etc or "NOT TESTED - no harness"
-  - Risks: Estimated Risk vs Measured Problem
+  - Structured findings: `- [F-001] severity=HIGH status=OPEN | N+1 query in ... | src/api.ts:45`
   - Verdict
 
 ## Tools
@@ -25,7 +25,7 @@ Tier 2+ if user mentions performance, or handling large data, loops, DB queries,
 - `time`, `du`, DB explain if applicable
 
 ## Gate Condition
-No open CRITICAL perf regression. If measurement impossible, mark NOT TESTED and log risk.
+No open CRITICAL perf regression (structured severity=CRITICAL|HIGH status=OPEN). If measurement impossible, mark NOT TESTED and log risk.
 
 ## Distinguish
 - Measured Problem: benchmark shows X ms > threshold

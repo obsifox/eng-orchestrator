@@ -17,16 +17,13 @@ Any frontend, mobile, game UI, CLI UX, WordPress frontend, dashboard.
 ## Expected Output
 - `.eng/artifacts/ux-review.md`:
   - Screens/flows checked
-  - Findings: usability issues severity
-  - Screenshots list if applicable (or description)
+  - Structured findings: `- [F-001] severity=MED status=OPEN | Missing loading state on ...`
+  - Screenshots list if applicable
   - Verdict
 
 ## Tools
 - Manual review
-- Accessibility checklist (quick axe or manual)
+- Accessibility checklist
 
 ## Gate Condition
-No open HIGH UX issue that breaks core flow. MED/LOW -> BACKLOG allowed.
-
-## Note
-UX review must coordinate with engineering constraints logged in decisions.md.
+No open HIGH UX issue that breaks core flow (severity=HIGH status=OPEN). MED/LOW -> BACKLOG allowed.
