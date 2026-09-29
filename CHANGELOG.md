@@ -2,6 +2,42 @@
 
 All notable changes to eng-orchestrator skill.
 
+## 1.1.0 - 2026-09-29
+### Added - Architecture Gap Closure (Control Plane)
+- **State Machine:** 17 canonical states (INTAKE, BASELINE, CLASSIFICATION, PLANNING, EXECUTION, VALIDATION, REVIEW, REWORK, VERIFICATION, RELEASE_REVIEW, HUMAN_APPROVAL, COMPLETED, BLOCKED, FAILED, CANCELLED, ESCALATED, RECOVERY) with 22+ valid transitions, 7 explicit invalid, deterministic rejection via `scripts/state_machine.sh` + `config/state_machine.yaml` - 37 tests PASS
+- **Run Manager:** Unique RUN-YYYY-XXXXXX ID, isolated dir `.eng/runs/RUN-xxx/` with manifest.json, state.json, events.jsonl, decisions.jsonl, artifacts/, agents/, checkpoints/, verification/, receipt.json via `scripts/run_manager.sh`
+- **Event Log:** Append-only `events.jsonl` with 23+ types (RUN_CREATED, BASELINE_STARTED, GATE_PASSED, etc.) via `scripts/event_log.sh`, no secrets
+- **Agent Contracts:** 6 agents in `agents/*.yaml` (architect, worker, reviewer, security-reviewer, verifier, release-manager) with inputs/outputs/capabilities/permissions/tools/model_policy/delegation/termination/failure_policy/evidence_required
+- **Permission Matrix:** Least privilege in `config/permissions.yaml` with 8 types (filesystem, shell, network, git, dependency, database, deployment, secret), enforced via `scripts/permission_check.sh`, no secret.read except human - 21 tests PASS
+- **Model Routing:** Tier != Model separation in `config/model_policy.yaml`, low/medium/high reasoning, adapters in `adapters/` (claude, codex, copilot, generic), provider-independent core
+- **Playbook Engine:** 11 workflow types in `workflows/` (feature, bug-fix, refactor, migration, performance, security, investigation, testing, release, documentation, incident) + 4 domain overlays in `domains/` (wordpress, android, web, backend) + risk overlays, composition via `scripts/playbook_engine.sh` - 7 tests PASS
+- **Preview Mode:** `scripts/preview.sh` and `scripts/eng.sh preview` shows classification without mutation, no files mutated - 2 tests
+- **Recovery System:** `scripts/recovery.sh` with detect, inspect, reconcile, recover, resume; checks uncommitted changes, branch divergence, checkpoint age; never destroys user changes - 8 tests PASS
+- **Worktree Isolation:** `scripts/worktree.sh` creates isolated worktree per run at `.eng/runs/RUN/worktree`, detects conflicts, never auto-destroy
+- **Review/Rework Bounded Loop:** Formal states REVIEW->REWORK->VALIDATION loop with max 2 cycles, then ESCALATED, no infinite loop
+- **Receipt:** `scripts/receipt.sh` generates machine-readable receipt.json answering why tier/agents/gates selected, tools used, permissions, evidence, rework cycles, human approval
+- **Structured Knowledge:** `.eng/knowledge/` with lessons/, failures/, decisions/, patterns/, regressions/, controlled promotion (freq>=3 or 1 CRITICAL)
+- **Skill Registry:** `scripts/skill_registry.sh` with discover, inspect, validate, load, disable, manifest validation, permission checks, no auto remote exec
+- **Adapter Layer:** `adapters/` with generic (always available), claude, codex, copilot (placeholder), provider-independent
+- **Evaluation Expansion:** From 15 to 50 deterministic scenarios in `evals/scenarios_v1_1.md` covering routing (5), delegation (5), security (5), recovery (6), verification (5), governance (5), additional v1.1 (9) - target 50 met
+- **Docs:** 10 new docs in `docs/` covering architecture, state-machine, agents, workflows, security, recovery, evaluation, adapters, audit
+- **Control Plane CLI:** `scripts/eng.sh` main entry with preview, run, list, show, state, event, recover, worktree, receipt, registry, playbook, gate commands
+- **Tests:** New tests 73 PASS (state_machine 37, permissions 21, recovery 8, playbook 7) + existing 15 = 88 total PASS
+- **Audit:** `docs/audit/v1.1-baseline.md` and `docs/audit/v1.1-implementation-audit.md` with full before/after, tests, security, recovery, limitations, next steps
+
+### Changed
+- SKILL.md: 81 -> 94 lines, version 1.0.1 -> 1.1.0, added control plane concepts, file map updated, still under 150
+- README.md: polished with badges, v1.1 features, file tree updated, exit code table, structured findings docs
+- .gitignore: updated to ignore .eng/runs/, .eng/evidence.md, .eng/state.json, keep knowledge
+
+### Preserved (Backward Compatibility)
+- Existing commands: detect_env, baseline, gate_check, secret_scan, dep_audit, report_lint, gates.test.sh
+- Existing playbooks: references/playbooks/ 6 files
+- Existing lenses: references/lenses/ 7 files
+- Existing tests: gates.test.sh 15 PASS
+- Gate hardening from v1.0.1: no state.json trust, EXIT_CODE logs, structured findings
+- No breaking changes, all additive
+
 ## 1.0.1 - 2026-09-29
 ### Fixed - Gate Hardening (per bugfix guide)
 - **Rule**: No gate reads state.json for PASS, only real command outputs (fixes False Completion)

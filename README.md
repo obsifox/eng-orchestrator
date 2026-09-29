@@ -1,13 +1,15 @@
-# 🛡️ eng-orchestrator - Mother Skill v1.0.1
+# 🛡️ eng-orchestrator - Control Plane v1.1.0
 
 [![Tests](https://github.com/obsifox/eng-orchestrator/actions/workflows/test.yml/badge.svg)](https://github.com/obsifox/eng-orchestrator/actions/workflows/test.yml)
-[![Version](https://img.shields.io/badge/version-1.0.1-blue.svg)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-1.1.0-blue.svg)](CHANGELOG.md)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
-[![Skill](https://img.shields.io/badge/skill-mother%20skill-orange.svg)](SKILL.md)
+[![Skill](https://img.shields.io/badge/skill-control%20plane-orange.svg)](SKILL.md)
 
-> **Production-grade master skill that turns a single AI agent into an adaptive professional engineering organization** — scaling from 1 engineer (Tier 0) to multi-disciplinary team (Tier 3) with evidence-driven gates.
+> **Engineering Orchestration Control Plane** — Turns AI agent into adaptive org with state machine, run manager, event log, agent contracts, permissions, model routing, playbook engine, preview, recovery, receipt.
 
-**Key Fix in v1.0.1:** No gate trusts `state.json` for PASS. Only real command outputs with `EXIT_CODE`. Structured findings, 10 regression tests, hardened security gates.
+**v1.1.0:** State machine (17 states, 37 tests), Run Manager (RUN-xxx isolation), Event Log (23 types), Agent Contracts (6), Permission Matrix (21 tests, least privilege), Model Routing (Tier != Model), Playbook Engine (11 workflows + 4 domains), Preview (no mutation), Recovery (8 tests), Worktree Isolation, Receipt, Skill Registry, Adapters, 50 eval scenarios.
+
+**v1.0.1 Fix:** No gate trusts `state.json` for PASS. Only real command outputs with `EXIT_CODE`.
 
 ## ✨ What it does
 
@@ -23,67 +25,108 @@
 ## 🚀 Quick Start
 
 ```bash
-# 1. Agent reads SKILL.md (81 lines, under 150)
+# 1. Agent reads SKILL.md (94 lines, <150)
 cat SKILL.md
 
-# 2. Detect environment
-./scripts/detect_env.sh --json
+# 2. Preview without mutation (v1.1)
+./scripts/eng.sh preview --type feature --task "Add auth"
+# or ./scripts/preview.sh --type feature --task "Add auth"
 
-# 3. Create .eng/ from templates
-cp -r .eng/templates/* .eng/
+# 3. Create isolated run
+./scripts/eng.sh run create --type feature --domain web --tier T2 --task "Add API"
+# -> RUN-2026-000001 with manifest.json, state.json, events.jsonl
 
-# 4. Baseline BEFORE any change
+# 4. State machine validation (deterministic)
+./scripts/eng.sh state validate --from EXECUTION --to COMPLETED
+# -> INVALID: Must go through VALIDATION, REVIEW, VERIFICATION
+
+# 5. Baseline BEFORE any change
 ./scripts/baseline.sh
 # -> .eng/artifacts/baseline_build.log (EXIT_CODE)
 # -> .eng/artifacts/baseline_test.log
 
-# 5. Build & check gates (real execution, no state.json trust)
-./scripts/gate_check.sh G0_Build   # build exit 0?
-./scripts/gate_check.sh G1_Tests   # tests >= baseline?
-./scripts/gate_check.sh G2_Lens --no-run  # no HIGH OPEN?
-./scripts/gate_check.sh G3_Security --no-run
-./scripts/gate_check.sh all
+# 6. Build & check gates (real execution, no state.json trust)
+./scripts/eng.sh gate G0_Build
+./scripts/eng.sh gate G1_Tests
+./scripts/eng.sh gate G2_Lens --no-run
+./scripts/eng.sh gate all
 
-# 6. Run regression tests
-./tests/gates.test.sh  # 15 assertions, all PASS
+# 7. Run all tests (88 PASS)
+./tests/gates.test.sh          # 15
+./tests/state_machine.test.sh  # 37
+./tests/permissions.test.sh    # 21
+./tests/recovery.test.sh       # 8
+./tests/playbook.test.sh       # 7
+
+# 8. Generate receipt
+./scripts/eng.sh receipt generate --run RUN-2026-000001
+# -> .eng/runs/RUN-xxx/receipt.json answering why tier/agents/gates
 ```
 
-## 📁 File Tree
+## 📁 File Tree v1.1
 
 ```
-SKILL.md (81 lines) - mother skill, triggers: "build this", "اینو بیلد کن"
-CHANGELOG.md - v1.0.0 -> v1.0.1 hardening
-lessons.md - promotion mechanism
+SKILL.md (94 lines) - control plane, triggers: "build this", "اینو بیلد کن"
+CHANGELOG.md - v1.0.0 -> v1.0.1 -> v1.1.0
+LICENSE (MIT)
 
-references/
-  tiers.md - Tier 0-3 definitions with caps
-  state-format.md - .eng/state.json schema v1
-  evidence-rules.md - SOLVED/UNSOLVED/BLOCKED/NOT TESTED/...
-  failure-modes.md - 13 modes with detection/mitigation
-  interaction-protocol.md - 3 questions max, approval points
-  report-template.md - final delivery template
-  lenses/ - 7 checklists (security, testing, performance, ux, docs, architecture, release)
-    - Structured findings: - [F-001] severity=HIGH status=OPEN | desc | file:line
-  playbooks/ - 6 domains (web-api, wordpress, paper-plugin, android, game-engine, cli)
+config/
+  state_machine.yaml - 17 states, transitions
+  permissions.yaml - least privilege matrix
+  model_policy.yaml - Tier != Model, adapters
 
-scripts/
-  lib_run.sh - NEW: run_step phase name cmd -> log with EXIT_CODE
-  detect_env.sh - env detection
-  baseline.sh - uses lib_run, produces baseline_*.log
-  secret_scan.sh - fixed pipe bug, excludes tests/, exit 1 on secret
-  dep_audit.sh - handles no lockfile -> NOT TESTED, tool error -> NOT TESTED
-  gate_check.sh - v1.0.1: no state.json trust, real logs, --no-run flag
-  report_lint.sh - checks structured findings, rejects SOLVED without evidence
+agents/ (6 contracts)
+  architect.yaml, worker.yaml, reviewer.yaml, security-reviewer.yaml, verifier.yaml, release-manager.yaml
+
+workflows/ (11 types)
+  feature, bug-fix, refactor, migration, performance, security, investigation, testing, release, documentation, incident
+
+domains/ (4 overlays, extensible)
+  wordpress, android, web, backend + legacy playbooks in references/playbooks/ (6)
+
+adapters/
+  generic (always), claude, codex, copilot (placeholder) - provider-independent
+
+scripts/ (control plane + gates)
+  eng.sh - main CLI: preview, run, list, show, state, event, recover, worktree, receipt, registry, playbook, gate
+  state_machine.sh - list-states, validate, transition, current, history (37 tests)
+  event_log.sh - append-only events.jsonl, 23 types
+  run_manager.sh - create RUN-YYYY-XXXXXX with manifest, state, events, artifacts, checkpoints, receipt
+  playbook_engine.sh - compose base+domain+risk+tier
+  preview.sh - eng preview, no mutation
+  recovery.sh - detect, inspect, reconcile, recover, resume (8 tests)
+  worktree.sh - isolated worktree per run
+  receipt.sh - receipt.json generation
+  permission_check.sh - enforce least privilege (21 tests)
+  skill_registry.sh - discover, inspect, validate, load, disable
+  lib_run.sh - run_step with EXIT_CODE
+  detect_env.sh, baseline.sh, gate_check.sh (no state.json trust), secret_scan.sh, dep_audit.sh, report_lint.sh
+
+docs/
+  audit/ - v1.1-baseline.md, v1.1-implementation-audit.md
+  architecture/ - overview, control-plane, knowledge, model-routing, skill-registry
+  state-machine/ - states, transitions, implementation
+  agents/ - contracts
+  workflows/ - types
+  security/ - permissions, skill-security
+  recovery/ - recovery
+  adapters/ - overview
+  evaluation/ - scenarios
+
+references/ (backward compat)
+  tiers.md, state-format.md, evidence-rules.md, failure-modes.md, interaction-protocol.md, report-template.md
+  lenses/ (7), playbooks/ (6)
 
 evals/
-  scenarios.md - 15 scenarios
-  results/ - 4 real executed with/without (S1, S2, S8, S9)
-  with_vs_without.md - comparison method
+  scenarios.md (15) + scenarios_v1_1.md (35) = 50 total
+  results/ - real executed with/without
 
-examples/ - good vs bad plan/verify/review (structured format)
-.eng/templates/ - brief.md, plan.md, decisions.md, evidence.md, state.json
-tests/gates.test.sh - 10 regression fixtures T1-T10 (15 asserts)
-.github/workflows/test.yml - CI on push/PR
+examples/ - good vs bad plan/verify/review (structured findings)
+.eng/templates/ - brief, plan, decisions, evidence, state.json
+.eng/knowledge/ - lessons/, failures/, decisions/, patterns/, regressions/
+tests/
+  gates.test.sh (15 asserts), state_machine.test.sh (37), permissions.test.sh (21), recovery.test.sh (8), playbook.test.sh (7) = 88 total
+.github/workflows/test.yml - CI
 ```
 
 ## 🔒 Hard Rules Enforced
@@ -162,8 +205,12 @@ MIT - See LICENSE
 
 ## 🔖 Version
 
-**1.0.1** - Gate hardening release. See CHANGELOG.md for full diff from 1.0.0
+**1.1.0** - Control Plane release. See CHANGELOG.md and `docs/audit/v1.1-implementation-audit.md` for full audit.
+
+- 88 tests PASS (15 gates + 37 state machine + 21 permissions + 8 recovery + 7 playbook)
+- 50 eval scenarios (15 existing + 35 new)
+- No secrets, no destructive behavior, backward compatible
 
 ---
 
-**Built for:** AI coding agents that need to behave like professional engineering orgs, not single programmers. Smallest effective team principle.
+**Built for:** Reliable, inspectable, recoverable, provider-independent engineering orchestration. Evidence > Claims, State > Conversation, Contracts > Personas.
