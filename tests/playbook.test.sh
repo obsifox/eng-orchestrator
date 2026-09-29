@@ -34,11 +34,12 @@ fi
 
 # Test 3: List workflows
 echo "--- P3: List workflows ---"
-if ./scripts/playbook_engine.sh list 2>&1 | grep -q "feature"; then
+out=$(./scripts/playbook_engine.sh list 2>&1 || true)
+if echo "$out" | grep -q "feature"; then
   echo "  ✅ P3 list workflows PASS"
   PASS=$((PASS+1))
 else
-  echo "  ❌ P3 FAIL"
+  echo "  ❌ P3 FAIL (out: $out)"
   FAIL=$((FAIL+1))
 fi
 
