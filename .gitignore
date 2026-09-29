@@ -1,0 +1,7 @@
+# .eng artifacts
+.eng/artifacts/
+.eng/checkpoint/
+.eng/.persist_test_*
+
+!.eng/templates/
+!.eng/templates/*
