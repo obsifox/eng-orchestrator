@@ -23,14 +23,43 @@ get_exit() {
   grep -h '^EXIT_CODE=' "$file" 2>/dev/null | tail -1 | cut -d= -f2
 }
 
-# Detect build and test commands from project files
-# Sets global BUILD_CMD and TEST_CMD (may be empty)
+# Detect build, test and lint commands.
+# Order (v1.2): the project profile wins, then real manifests, then heuristics.
+# Sets globals BUILD_CMD, TEST_CMD, LINT_CMD (any may be empty).
 detect_cmds() {
   BUILD_CMD=""
   TEST_CMD=""
+  LINT_CMD=""
+  PROFILE_FILE=".eng/project.yaml"
+
+  # 1. An explicit profile beats every guess: `.eng/project.yaml` -> commands.build/test/lint.
+  if [ -f "$PROFILE_FILE" ] && command -v python3 >/dev/null 2>&1; then
+    local profile_out
+    profile_out=$(python3 "$(dirname "${BASH_SOURCE[0]}")/project_profile.py" --file "$PROFILE_FILE" --shell 2>/dev/null) || profile_out=""
+    if [ -n "$profile_out" ]; then
+      # eval of our own parser's output: every value is single-quote escaped.
+      eval "$profile_out"
+    fi
+  fi
+
+  # 2. Manifests that mean what they say.
   if [ -f package.json ]; then
-    if grep -q '"build"' package.json; then BUILD_CMD="npm run build"; fi
-    if grep -q '"test"' package.json; then TEST_CMD="npm test"; fi
+    if grep -q '"build"' package.json; then BUILD_CMD="${BUILD_CMD:-npm run build}"; fi
+    if grep -q '"test"' package.json; then TEST_CMD="${TEST_CMD:-npm test}"; fi
+  fi
+  if [ -z "$TEST_CMD" ] && [ -f composer.json ]; then
+    # PHP without a profile: composer scripts, then the common test entry points.
+    if grep -q '"test"' composer.json && command -v composer >/dev/null 2>&1; then
+      TEST_CMD="composer test"
+    elif [ -f tests/run.php ]; then
+      TEST_CMD="php tests/run.php"
+    fi
+    if [ -z "$BUILD_CMD" ] && grep -q '"build"' composer.json && command -v composer >/dev/null 2>&1; then
+      BUILD_CMD="composer build"
+    fi
+  fi
+  if [ -z "$TEST_CMD" ] && [ -f tests/run.php ]; then
+    TEST_CMD="php tests/run.php"
   fi
   if [ -z "$TEST_CMD" ]; then
     if [ -f go.mod ]; then
@@ -53,6 +82,11 @@ detect_cmds() {
     if [ -f Makefile ]; then
       if grep -q "^build:" Makefile; then BUILD_CMD="make build"; fi
     fi
+  fi
+
+  # 3. Last resort for a PHP tree with no manifest: a phpunit config is a test runner.
+  if [ -z "$TEST_CMD" ] && { [ -f phpunit.xml ] || [ -f phpunit.xml.dist ]; }; then
+    if [ -x vendor/bin/phpunit ]; then TEST_CMD="vendor/bin/phpunit"; else TEST_CMD="phpunit"; fi
   fi
 }
 

@@ -1,4 +1,4 @@
-name: Eng Orchestrator CI - Full Suite v2.0 with Arena
+name: Eng Orchestrator CI - Full Suite v2.1 (Project Profiles + Arena)
 
 on:
   push:
@@ -33,34 +33,20 @@ jobs:
       - name: Run playbook tests (7 compositions)
         run: ./tests/playbook.test.sh
 
-      - name: Run arena tests (NEW v2.0)
+      - name: Run project profile tests (17 asserts) - v1.2
+        run: ./tests/project_profile.test.sh
+
+      - name: Run dependency audit tests (12 asserts) - v1.2.1
+        run: ./tests/dep_audit.test.sh
+
+      - name: Run arena tests (20) - v2.0
         run: |
-          echo "=== Arena bracket.py unit tests ==="
-          python3 skills/arena/bracket.py plan --agents 16
+          ./tests/arena.test.sh
           python3 skills/arena/bracket.py plan --quick
-          # Test init in temp dir
-          TMPDIR=$(mktemp -d)
-          python3 skills/arena/bracket.py init --agents 4 --seed 7 --task "Test task" --dir $TMPDIR
-          cat $TMPDIR/arena.json | python3 -m json.tool | head -n 30
-          python3 skills/arena/bracket.py pairings --dir $TMPDIR
-          python3 skills/arena/bracket.py status --dir $TMPDIR
-          rm -rf $TMPDIR
-          echo "Arena bracket.py PASS"
-          echo ""
-          echo "=== Arena wrapper tests ==="
-          ./scripts/arena.sh plan --quick
-          ./scripts/arena.sh plan --agents 100
-          # Test arena run creation
-          RUN_ID=$(./scripts/arena.sh run --task "CI arena test" --agents 4 --seed 42 2>&1 | grep -oE "RUN-[0-9]+-[0-9]+" | head -n1 || echo "")
-          if [ -n "$RUN_ID" ]; then
-            echo "Created arena run $RUN_ID"
-            ./scripts/arena.sh status --run $RUN_ID
-            ./scripts/arena.sh pairings --run $RUN_ID
-            ./scripts/arena.sh next --run $RUN_ID | head -n 20
-            rm -rf .eng/runs/$RUN_ID
-            rm -rf .arena
-          fi
-          echo "Arena wrapper PASS"
+          python3 skills/arena/bracket.py plan --agents 100
+
+      - name: Validate the example project profile
+        run: python3 scripts/project_profile.py --file examples/project.yaml --check
 
       - name: Run evaluation suite (50+ scenarios + arena)
         run: |
@@ -101,7 +87,6 @@ jobs:
           # Test arena init inside run
           ./scripts/arena.sh init --run $RUN_ID --task "CI arena inside run" --agents 4 --seed 7
           ls -lh .eng/runs/$RUN_ID/arena/
-          cat .eng/runs/$RUN_ID/arena/arena.json | python3 -m json.tool | head -n 20
           rm -rf .eng/runs/$RUN_ID
           rm -rf .arena
           echo "Run manager + arena PASS"
@@ -139,10 +124,10 @@ jobs:
           fi
           echo "No real secrets found"
 
-      - name: Test cost telemetry and knowledge (v1.1) + arena config
+      - name: Test cost telemetry and knowledge (v1.1) + arena config + project profile
         run: |
           ./scripts/cost_telemetry.sh --help || true
           ./scripts/knowledge.sh list || true
-          cat config/arena.yaml | head -n 30
-          echo "v2.0 extras PASS"
-
+          cat config/arena.yaml | head -n 20
+          ./scripts/project_profile.sh --check || true
+          echo "v2.1 extras PASS"

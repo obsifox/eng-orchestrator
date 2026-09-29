@@ -13,9 +13,11 @@ while [[ $# -gt 0 ]]; do
   case "$1" in
     --path) SCAN_PATH="$2"; shift 2 ;;
     --out) OUT="$2"; shift 2 ;;
+    --allow) SECRET_ALLOW_FILE="$2"; shift 2 ;;
     -h|--help)
       echo "Usage: $0 [--path <dir>] [--out <log>]"
       echo "Scans for common secret patterns"
+      echo "Allow list entries: pattern || path-substring || reason (printed in the log)"
       echo "Exit 0 clean, 1 secrets found, 2 error"
       exit 0
       ;;
@@ -37,11 +39,52 @@ PATTERNS=(
 )
 
 FOUND=0
+ALLOWED_HITS=0
 TMP_LOG=$(mktemp)
+ALLOW_FILE="${SECRET_ALLOW_FILE:-.eng/secret_scan.allow}"
+
+# allowed_hit <grep line> <pattern>
+# A hit is allowed only when the allow file names both the pattern and a path substring of
+# the file, with a written reason. Allowances are printed, never silent. Anything not
+# covered stays a finding.
+allowed_hit() {
+  local line="$1" pat="$2"
+  [ -f "$ALLOW_FILE" ] || return 1
+  local entry normal a_pat a_path a_reason file
+  file="${line%%:*}"
+  while IFS= read -r entry; do
+    case "$entry" in ''|'#'*) continue ;; esac
+    # Accept `a|b|c` and `a || b || c`; squeeze runs of pipes, then take the fields.
+    normal="$(printf '%s' "$entry" | tr -s '|')"
+    a_pat="$(printf '%s' "$normal" | cut -d'|' -f1 | sed 's/^ *//; s/ *$//')"
+    a_path="$(printf '%s' "$normal" | cut -d'|' -f2 | sed 's/^ *//; s/ *$//')"
+    a_reason="$(printf '%s' "$normal" | cut -d'|' -f3- | sed 's/^ *//; s/ *$//')"
+    [ -z "$a_pat" ] && continue
+    # A written reason is mandatory: an unexplained allowance is ignored, loudly.
+    if [ -z "$a_reason" ]; then
+      echo "ALLOWANCE IGNORED (no reason): $entry"
+      continue
+    fi
+    if [ "$a_pat" != "$pat" ] && ! printf '%s' "$pat" | grep -qE "$a_pat"; then
+      continue
+    fi
+    if [ -n "$a_path" ]; then
+      case "$file" in *"$a_path"*) return 0 ;; esac
+      continue
+    fi
+    return 0
+  done < "$ALLOW_FILE"
+  return 1
+}
 
 {
   echo "=== SECRET SCAN $(date -u +%Y-%m-%dT%H:%M:%SZ) PATH=$SCAN_PATH ==="
   echo "Excluding: .git, node_modules, .eng/artifacts, dist, build, .venv, __pycache__, .next, out, target, vendor, tests"
+  if [ -f "$ALLOW_FILE" ]; then
+    echo "Allow list: $ALLOW_FILE (each entry must carry a reason)"
+  else
+    echo "Allow list: none"
+  fi
   echo ""
 
   EXCLUDE_DIRS=(.git node_modules .eng dist build .venv __pycache__ .next out target vendor tests)
@@ -52,15 +95,39 @@ TMP_LOG=$(mktemp)
 
   for pat in "${PATTERNS[@]}"; do
     echo "--- Checking pattern: $pat ---"
+    matches=""
     # shellcheck disable=SC2086
-    if grep -R -I -n -E $GREP_EXCLUDES --exclude="*.log" --exclude="secret_scan.sh" "$pat" "$SCAN_PATH" 2>/dev/null; then
-      echo "FOUND: $pat"
-      FOUND=1
-    else
+    matches=$(grep -R -I -n -E $GREP_EXCLUDES --exclude="*.log" --exclude="secret_scan.sh" "$pat" "$SCAN_PATH" 2>/dev/null || true)
+    if [ -z "$matches" ]; then
       echo "clean"
+    else
+      hits=0
+      while IFS= read -r line; do
+        [ -z "$line" ] && continue
+        if allowed_hit "$line" "$pat"; then
+          echo "ALLOWED: $line"
+          ALLOWED_HITS=$((ALLOWED_HITS + 1))
+          continue
+        fi
+        echo "$line"
+        hits=$((hits + 1))
+      done <<< "$matches"
+      if [ "$hits" -gt 0 ]; then
+        echo "FOUND: $pat ($hits hit(s))"
+        FOUND=1
+      else
+        echo "clean (after $ALLOWED_HITS documented allowance(s))"
+      fi
     fi
     echo ""
   done
+
+  if [ -n "$ALLOW_FILE" ] && [ -f "$ALLOW_FILE" ]; then
+    echo "Allow file (reproduced in full so the log can be audited): $ALLOW_FILE"
+    grep '|' "$ALLOW_FILE" 2>/dev/null | sed 's/^/  - /' || true
+    echo "  hits allowed by it: $ALLOWED_HITS"
+    echo ""
+  fi
 
   echo "--- Checking .env files presence ---"
   if ls "$SCAN_PATH"/.env 2>/dev/null; then

@@ -165,11 +165,11 @@ else
   fail "SKILL.md missing Arena section"
 fi
 
-# Test 17: SKILL.md version 2.0.0
-if grep -q "version: 2.0.0" "$ROOT/SKILL.md"; then
-  ok "SKILL.md version 2.0.0"
+# Test 17: SKILL.md version 2.x
+if grep -qE "version: 2\.[0-9]+\.[0-9]+" "$ROOT/SKILL.md"; then
+  ok "SKILL.md version 2.x (arena integrated)"
 else
-  fail "SKILL.md version not 2.0.0"
+  fail "SKILL.md version not 2.x"
 fi
 
 echo ""

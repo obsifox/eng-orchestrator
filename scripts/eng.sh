@@ -1,8 +1,5 @@
 #!/usr/bin/env bash
-# eng.sh - Engineering Control Plane CLI v1.1
-# Main entry point for eng-orchestrator
-# Usage: ./scripts/eng.sh <command> [options]
-# Commands: preview, run, list, show, recover, receipt, registry, state, event, worktree
+# eng.sh - Engineering Control Plane CLI v2.1 - with Project Profiles + Arena
 set -uo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
@@ -66,8 +63,12 @@ case "${1:-}" in
     shift
     "$SCRIPT_DIR/cost_telemetry.sh" "$@"
     ;;
+  project-profile|project)
+    shift
+    "$SCRIPT_DIR/project_profile.sh" "$@"
+    ;;
   -h|--help|help|*)
-    echo "eng-orchestrator Control Plane v2.0 - with Arena Tournament"
+    echo "eng-orchestrator Control Plane v2.1 - Project Profiles + Arena"
     echo ""
     echo "Usage: $0 <command> [options]"
     echo ""
@@ -82,17 +83,18 @@ case "${1:-}" in
     echo "  worktree {create|remove|list|detect|cleanup} --run RUN - Worktree isolation"
     echo "  receipt generate --run RUN - Generate receipt.json"
     echo "  registry {discover|inspect|validate|load|disable} - Skill registry"
-    echo "  playbook {compose|list} - Playbook engine (11 workflows + 15 domains)"
-    echo "  gate <gate> [--no-run] - Gate engine (G0_Build, G1_Tests, etc.)"
+    echo "  playbook {compose|list} - Playbook engine (12 workflows incl arena + 15 domains)"
+    echo "  gate <gate> [--no-run] - Gate engine (G0_Build, G1_Tests, G2_Lens, G3_Security, G4_Release, G5_Project)"
     echo "  knowledge {add|validate|promote-check|list|check} - Structured knowledge"
     echo "  cost {record|show} --run RUN --metric NAME --value VAL - Cost telemetry"
+    echo "  project-profile {--check|--help} - Project profile validation (v1.2)"
     echo ""
-    echo "Arena Tournament (NEW in v2.0):"
+    echo "Arena Tournament (NEW v2.0):"
     echo "  arena plan [--agents N|--quick] [--seed S] - Show rounds/calls/waves"
     echo "  arena run --task \"desc\" [--agents N|--quick] [--seed S] - Full tournament"
     echo "  arena init --run RUN --task \"desc\" [--agents N|--quick] --seed S"
     echo "  arena next --run RUN - Drive tournament loop (spawn->attack->defend->judge)"
-    echo "  arena prompts <phase> --run RUN - Write sub-agent briefs (phase=spawn|attack|defend|judge|final)"
+    echo "  arena prompts <phase> --run RUN - Write sub-agent briefs (spawn|attack|defend|judge|final)"
     echo "  arena winner --run RUN - Champion solution + why it won"
     echo "  arena status --run RUN - Alive/eliminated per round"
     echo "  arena pairings --run RUN - Current round matches"
@@ -100,6 +102,7 @@ case "${1:-}" in
     echo "Examples:"
     echo "  $0 preview --type feature --task 'Add auth'"
     echo "  $0 run create --type feature --domain wordpress --tier T3 --task 'WooCommerce bulk discount'"
+    echo "  $0 project-profile --check"
     echo "  $0 arena run --task 'Design auth system' --quick   # 16 agents, 4 rounds, 91 calls"
     echo "  $0 arena run --task 'Fix critical bug' --agents 100  # 100 agents, 7 rounds, 595 calls"
     echo "  $0 arena next --run RUN-2026-000001"

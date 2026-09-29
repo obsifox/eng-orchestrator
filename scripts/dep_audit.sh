@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# dep_audit.sh - Dependency audit wrapper v1.0.1
+# dep_audit.sh - Dependency audit wrapper v1.2.1
 # Usage: ./scripts/dep_audit.sh [--out .eng/artifacts/dep_audit.log]
 # Exit codes: 0 no HIGH vuln, 1 HIGH/CRITICAL found, 2 NOT TESTED (no tool/lockfile/error), 3 NOT APPLICABLE (no deps)
 set -uo pipefail
@@ -12,7 +12,8 @@ while [[ $# -gt 0 ]]; do
     --out) OUT="$2"; shift 2 ;;
     -h|--help)
       echo "Usage: $0 [--out <log>]"
-      echo "Tries npm audit, pip-audit, govulncheck"
+      echo "Tries npm audit, composer audit, pip-audit, govulncheck"
+    echo "Nested manifests (tests/e2e/package.json) are found too, and runtime dependencies are separated from dev-only ones"
       echo "Exit 0 clean, 1 HIGH found, 2 NOT TESTED, 3 NOT APPLICABLE"
       exit 0
       ;;
@@ -29,14 +30,110 @@ NOT_APPLICABLE=false
   echo "=== DEP AUDIT $(date -u +%Y-%m-%dT%H:%M:%SZ) ==="
   echo ""
 
-  # Check if project has any dependency manifest
+  # Which manifests exist? Root manifests plus nested ones (a project often keeps its test
+  # harness in its own package.json). Directories that only ever hold installed code are
+  # skipped, because a dependency of a dependency is not what this audit is about.
+  NESTED_SKIP="node_modules vendor .git dist build .venv .cache __pycache__ .eng"
+
+  find_manifests() {
+    local name="$1"
+    find . -maxdepth 3 -name "$name" -type f \
+      -not -path './node_modules/*' -not -path './vendor/*' -not -path './.git/*' \
+      -not -path './dist/*' -not -path './build/*' -not -path './.eng/*' \
+      | sort
+  }
+
+  MANIFESTS="$( { find_manifests package.json; find_manifests composer.json; find_manifests requirements.txt; find_manifests pyproject.toml; find_manifests go.mod; find_manifests build.gradle; find_manifests build.gradle.kts; } | sort -u )"
   HAS_MANIFEST=false
-  if [ -f package.json ] || [ -f requirements.txt ] || [ -f pyproject.toml ] || [ -f go.mod ] || [ -f build.gradle ] || [ -f build.gradle.kts ]; then
-    HAS_MANIFEST=true
+  [ -n "$MANIFESTS" ] && HAS_MANIFEST=true
+
+  if $HAS_MANIFEST; then
+    echo "--- Manifests found ---"
+    printf '  %s\n' $MANIFESTS
+    echo "--- Runtime vs dev-only ---"
   fi
 
+  # A manifest with only dev dependencies cannot produce a vulnerable *release*; that is a
+  # different question from "can a developer's toolchain be audited", and the two are reported
+  # separately so `NOT APPLICABLE` is never used to hide a manifest that does have runtime deps.
+  RUNTIME_MANIFESTS=""
+  DEV_ONLY_MANIFESTS=""
+  TOOLING_MANIFESTS=""
+
+  # A nested manifest belongs to a tool, a test harness or a sample - not to the release.
+  # It is still printed, under its own label, so nothing is hidden by the classification.
+  is_tooling_manifest() {
+    case "$1" in
+      ./*/*) case "$1" in ./src/*) return 1 ;; *) return 0 ;; esac ;;
+      *) return 1 ;;
+    esac
+  }
+
+  # The parser prints its verdict; the shell never has to read an exit code backwards. An
+  # unreadable manifest is treated as runtime - the conservative direction, because a manifest
+  # we cannot read must not be able to turn a real dependency into "nothing to audit".
+  classify_manifest() {
+    local file="$1" verdict="" kind=""
+
+    case "$file" in
+      *package.json|*composer.json)
+        if command -v python3 >/dev/null 2>&1; then
+          verdict="$(python3 - "$file" <<'PYCLASSIFY'
+import json, sys
+
+try:
+    data = json.load(open(sys.argv[1]))
+except Exception:
+    print('unknown')
+    raise SystemExit(0)
+
+PLATFORM = ('php', 'hhvm', 'composer-plugin-api', 'composer-runtime-api')
+
+if sys.argv[1].endswith('package.json'):
+    packages = []
+    for key in ('dependencies', 'optionalDependencies', 'peerDependencies'):
+        packages += list(data.get(key) or {})
+else:
+    # `require: {"php": ">=8.0"}` is a platform floor, not a dependency: it pulls in no code.
+    packages = [
+        name for name in (data.get('require') or {})
+        if name not in PLATFORM and not name.startswith(('ext-', 'lib-'))
+    ]
+
+print('runtime' if packages else 'dev-only')
+PYCLASSIFY
+)"
+        fi
+
+        case "${verdict:-unknown}" in
+          runtime|dev-only) kind="$verdict" ;;
+          *) kind="runtime" ;;
+        esac
+        ;;
+      *)
+        kind="runtime"
+        ;;
+    esac
+
+    if is_tooling_manifest "$file"; then
+      TOOLING_MANIFESTS="$TOOLING_MANIFESTS $file"
+      echo "  tooling (nested, does not ship): $file"
+    elif [ "$kind" = "runtime" ]; then
+      RUNTIME_MANIFESTS="$RUNTIME_MANIFESTS $file"
+      echo "  runtime:  $file"
+    else
+      DEV_ONLY_MANIFESTS="$DEV_ONLY_MANIFESTS $file"
+      echo "  dev-only: $file"
+    fi
+  }
+
+  for manifest in $MANIFESTS; do
+    classify_manifest "$manifest"
+  done
+  [ -n "$RUNTIME_MANIFESTS" ] && echo "" || true
+
   if ! $HAS_MANIFEST; then
-    echo "No dependency manifest found (package.json, requirements.txt, go.mod, etc)"
+    echo "No dependency manifest found (package.json, composer.json, requirements.txt, go.mod, ...)"
     echo "RESULT: NOT APPLICABLE - no dependencies to audit"
     exit 3
   fi
@@ -141,6 +238,39 @@ PY
     fi
   fi
 
+  # PHP
+  if [ -f composer.json ]; then
+    if [ ! -f composer.lock ]; then
+      echo "--- PHP: composer.json found but no composer.lock ---"
+      echo "RESULT-PART: php NOT TESTED - no lockfile (run: composer update --lock)"
+      echo ""
+    elif command -v composer >/dev/null 2>&1; then
+      FOUND_TOOL=true
+      echo "--- composer audit ---"
+      if composer audit --format=json > /tmp/composer_audit.json 2>/dev/null; then
+        echo "composer audit clean"
+      else
+        if [ -s /tmp/composer_audit.json ]; then
+          if grep -q '"advisories"[[:space:]]*:[[:space:]]*{[^}]*[a-z]' /tmp/composer_audit.json; then
+            HAS_HIGH=true
+            echo "Vulns found"
+          else
+            echo "No advisories reported"
+          fi
+          cat /tmp/composer_audit.json
+        else
+          NOT_TESTED_REASON="composer audit produced no output"
+          echo "composer audit error"
+        fi
+      fi
+      echo ""
+    else
+      echo "--- composer not installed, PHP dependencies not audited ---"
+      echo "RESULT-PART: php NOT TESTED - no composer binary"
+      echo ""
+    fi
+  fi
+
   # Go
   if [ -f go.mod ]; then
     if command -v govulncheck >/dev/null 2>&1; then
@@ -161,15 +291,20 @@ PY
   fi
 
   if ! $FOUND_TOOL; then
-    # If we had manifest but no tool, it's NOT TESTED not NOT APPLICABLE
-    if $HAS_MANIFEST; then
-      echo "No supported audit tool found for this project's manifest"
-      echo "RESULT: NOT TESTED - no audit tool"
+    if [ -n "$RUNTIME_MANIFESTS" ]; then
+      # Something ships. Saying "no dependencies" here would be a lie.
+      echo "No supported audit tool ran for:$RUNTIME_MANIFESTS"
+      echo "RESULT: NOT TESTED - runtime manifest with no audit tool"
       exit 2
-    else
-      echo "RESULT: NOT APPLICABLE - no deps"
-      exit 3
     fi
+
+    # Only dev-only manifests and no tool for them: nothing is shipped, so there is nothing
+    # for this audit to clear - but the manifests are named, not swallowed.
+    echo "Developer-side manifest(s) with no audit tool:$DEV_ONLY_MANIFESTS$TOOLING_MANIFESTS"
+    echo "Neither a dev-only manifest nor a nested tooling manifest reaches a release;"
+    echo "auditing them needs the lockfile and the tool, which belongs in CI."
+    echo "RESULT: NOT APPLICABLE - no runtime dependencies; dev-only manifest(s) listed above"
+    exit 3
   fi
 
   if $HAS_HIGH; then

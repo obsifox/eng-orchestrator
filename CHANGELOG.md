@@ -2,6 +2,28 @@
 
 All notable changes to eng-orchestrator skill.
 
+## 2.1.0 - 2026-09-29
+### Added - Merged v1.2.1 + v2.0.0 -> v2.1.0 (Major)
+- **Merge:** v1.2.0 (project profiles, PHP detection, G5_Project, secret allow list) + v1.2.1 (dep audit PHP/nested, timezone-aware, secret allow full log) + v2.0.0 (arena tournament) = v2.1.0. Resolves rebase conflict, preserves all features.
+- **Project Profiles (v1.2):** `.eng/project.yaml` declares build/test/lint + gate extras + secret allow file, `scripts/project_profile.py` (8.5K) + `scripts/project_profile.sh` (505B), template `.eng/templates/project.yaml`, example `examples/project.yaml`, doc `docs/architecture/project-profile.md`. `detect_cmds` prefers profile over heuristics, PHP checked before pytest (fixes WordPress tests/ dir mis-detection), composer.json, phpunit.xml support.
+- **G5_Project Gate:** Runs extras from `.eng/project.yaml` via `run_step`, logs `.eng/artifacts/profile_<name>.log` with EXIT_CODE, part of `gate all`, statuses PASS/FAIL/WARNING/NOT APPLICABLE/NOT TESTED.
+- **Secret Allow List (v1.2):** `.eng/secret_scan.allow` with mandatory reasons, `secret_scan.sh` reproduces allow file in full in log, reports hits allowed (v1.2.1).
+- **Dep Audit PHP (v1.2.1):** Understands PHP and nested manifests (composer.lock, package-lock.json, etc.), timezone-aware timestamps.
+- **Arena (v2.0 preserved):** skills/arena/ (bracket.py 1235 lines, strategies.json 2160 cards, rubric.md, SKILL.md), config/arena.yaml, workflows/arena.yaml, scripts/arena.sh, docs/arena/overview.md, tests/arena.test.sh 20 PASS, 151 eval PASS.
+- **File Map v2.1:** Adds .eng/project.yaml, .eng/secret_scan.allow, .eng/templates/project.yaml, docs/architecture/project-profile.md, scripts/project_profile.py/.sh, examples/project.yaml, tests/project_profile.test.sh, tests/dep_audit.test.sh.
+
+### Changed - v2.1 Merge
+- **SKILL.md:** v2.0.0 ~180 lines -> v2.1.0 ~200 lines, version 2.1.0, added section 1 project profile (detect_cmds order, .eng/project.yaml), section 2 G5_Project, section 6 secret allow list + PHP detection, section 11 secret allow, file map v2.1 includes project profile + arena. Keeps all v2.0 arena section 9.
+- **README.md:** Updated to v2.1.0 with project profiles + arena, badges, quick start includes project_profile.sh --check and arena run, file tree v2.1 with both v1.2 and v2.0 files, hard rules includes arena sandboxed + project profile + secret allow, tiers includes arena token budgets, arena quick reference.
+- **eng.sh:** Merged v1.2 (project_profile commands) + v2.0 (arena, knowledge, cost) -> v2.1 with all commands.
+- **test.yml:** Merged v1.2 (project_profile tests, dep_audit, secret allow, PHP) + v2.0 (arena tests) -> v2.1 full suite.
+- **evals/run_all.sh:** Updated to 151 PASS (108 unit + 43 simulated) v2.1.
+
+### Preserved - All v1.2.1 + v2.0 Features
+- v1.2.1: project profiles, PHP detection, G5_Project, secret allow, dep audit PHP/nested, 117 tests
+- v2.0: arena tournament 100 agents, 2160 cards, attack/defend/judge, 20 tests PASS, 151 eval PASS
+- v1.1: 17-state machine 37 tests, run manager, event log 23 types, 6 agents, permissions 21 tests, model routing 3 adapter.py, playbook 12 workflows (11+arena) + 15 domains, preview, recovery 8 tests, worktree cleanup, receipt enrichment, cost telemetry, knowledge promotion, 88 tests
+
 ## 2.0.0 - 2026-09-29
 ### Added - Arena Tournament Mode (Major Rewrite)
 - **Arena Integration:** Installed `skills/arena/` from https://github.com/Jakeschincariol/arena-skill (MIT) - bracket.py 1235 lines, strategies.json 2160 cards, rubric.md, ARENA_SKILL.md original. Integrated as escalation mode when user dissatisfied or explicitly /arena.
