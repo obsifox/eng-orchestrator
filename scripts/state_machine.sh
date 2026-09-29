@@ -199,7 +199,7 @@ with open("$state_file") as f:
     data=json.load(f)
 data['previous_state']=data.get('current_state','$from')
 data['current_state']='$to'
-data['updated_at']=datetime.datetime.utcnow().isoformat()+'Z'
+data['updated_at']=datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
 data['actor']='$actor'
 with open("$state_file",'w') as f:
     json.dump(data,f,indent=2)

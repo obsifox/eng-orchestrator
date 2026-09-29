@@ -54,7 +54,7 @@ create_run() {
   },
   "task": "${task_desc:-}",
   "state": "INTAKE",
-  "version": "1.1.0"
+  "version": "1.2.1"
 }
 JSON
 

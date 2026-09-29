@@ -1,7 +1,7 @@
 name: feature
 description: "Implement new feature"
 type: workflow
-version: 1.2.0
+version: 1.2.1
 
 states_required:
   - INTAKE

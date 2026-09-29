@@ -2,6 +2,37 @@
 
 All notable changes to eng-orchestrator skill.
 
+## 1.2.1 - 2026-09-29
+
+### Fixed - all three found by running v1.2.0 against a real PHP project, not by reading it
+
+- **`state_machine.sh` used `datetime.utcnow()`**, deprecated since Python 3.12, so every
+  transition printed a `DeprecationWarning`. Timestamps are now timezone-aware and keep the same
+  `...Z` shape.
+- **`dep_audit.sh` inspected root manifests only**, so a repository whose PHP dev tooling lives
+  in `composer.json` and whose test harness owns `tests/e2e/package.json` was reported as
+  *"no dependencies to audit"* - a green light nobody had earned. It now finds manifests up to
+  depth 3 (skipping `vendor/`, `node_modules/`, `dist/`, `build/`, `.eng/`), separates
+  **runtime** from **dev-only** from **nested tooling**, audits PHP with `composer audit` and
+  says why when it cannot, treats an unreadable manifest as runtime (the conservative
+  direction), and can no longer reach `NOT APPLICABLE` while a shipped manifest exists. A
+  platform floor such as `"require": {"php": ">=8.0"}` counts as no dependency at all: it pulls
+  in no code.
+- **`run_manager.sh` stamped new run manifests with `"version": "1.1.0"`** on a 1.2.x base.
+
+### Added
+
+- **`tests/dep_audit.test.sh`** - 12 asserts over the classification: no manifest, dev-only PHP
+  manifest, nested test harness, shipped dependency without a lockfile, both kinds in one
+  repository, and a platform-only `require` block. Total: **117 asserts across 7 suites**.
+- CI runs the new suite; `README.md`, `SKILL.md`, `config/`, `workflows/`, `domains/`,
+  `agents/` and `adapters/` report 1.2.1.
+
+### Compatibility
+
+A repository with no manifest, or with a root `package.json` and a lockfile, behaves exactly as
+in v1.2.0. Classification is additive: every manifest found is printed under its own label.
+
 ## 1.2.0 - 2026-09-29
 ### Added - Project profiles, PHP support, project gates, secret allow list
 - **Project profile (`.eng/project.yaml`):** a repository declares its own `commands.build`, `commands.test`, `commands.lint`, `gates.extras` and `secret_scan.allow` once, and every gate uses them instead of guessing. Read by `scripts/project_profile.py` (no third-party dependency; a documented YAML subset, tabs and flow style rejected with a line number) and `scripts/project_profile.sh`. CLI: `--check` (0 ok, 3 none, 4 empty, 5 malformed), `--shell`, `--json`, `--gates`, `--get KEY`.

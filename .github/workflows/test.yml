@@ -36,6 +36,9 @@ jobs:
       - name: Run project profile tests (17 asserts) - v1.2
         run: ./tests/project_profile.test.sh
 
+      - name: Run dependency audit tests (12 asserts) - v1.2.1
+        run: ./tests/dep_audit.test.sh
+
       - name: Validate the example project profile
         run: python3 scripts/project_profile.py --file examples/project.yaml --check
 

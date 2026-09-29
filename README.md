@@ -1,4 +1,4 @@
-# 🛡️ eng-orchestrator - Control Plane v1.2.0
+# 🛡️ eng-orchestrator - Control Plane v1.2.1
 
 [![Tests](https://github.com/obsifox/eng-orchestrator/actions/workflows/test.yml/badge.svg)](https://github.com/obsifox/eng-orchestrator/actions/workflows/test.yml)
 [![Version](https://img.shields.io/badge/version-1.2.0-blue.svg)](CHANGELOG.md)
@@ -7,7 +7,7 @@
 
 > **Engineering Orchestration Control Plane** — Turns AI agent into adaptive org with state machine, run manager, event log, agent contracts, permissions, model routing, playbook engine, preview, recovery, receipt.
 
-**v1.2.0 (current):** Project profiles (`.eng/project.yaml`) + PHP/Composer detection, `G5_Project` gate for project-defined extras, secret-scan allow list with mandatory reasons (17 new asserts, 105 total).
+**v1.2.1 (current):** Project profiles (`.eng/project.yaml`) + PHP/Composer detection, `G5_Project` gate for project-defined extras, secret-scan allow list with mandatory reasons, and a dependency audit that understands PHP and nested manifests (29 new asserts, 117 total).
 
 **v1.1.0:** State machine (17 states, 37 tests), Run Manager (RUN-xxx isolation), Event Log (23 types), Agent Contracts (6), Permission Matrix (21 tests, least privilege), Model Routing (Tier != Model), Playbook Engine (11 workflows + 4 domains), Preview (no mutation), Recovery (8 tests), Worktree Isolation, Receipt, Skill Registry, Adapters, 50 eval scenarios.
 
@@ -57,7 +57,7 @@ cat SKILL.md
 ./scripts/eng.sh gate G2_Lens --no-run
 ./scripts/eng.sh gate all
 
-# 7. Run all tests (105 PASS)
+# 7. Run all tests (117 PASS)
 ./tests/gates.test.sh          # 15
 ./tests/state_machine.test.sh  # 37
 ./tests/permissions.test.sh    # 21
@@ -134,7 +134,8 @@ examples/ - good vs bad plan/verify/review (structured findings)
 .eng/knowledge/ - lessons/, failures/, decisions/, patterns/, regressions/
 tests/
   gates.test.sh (15 asserts), state_machine.test.sh (37), permissions.test.sh (21),
-  recovery.test.sh (8), playbook.test.sh (7), project_profile.test.sh (17) = 105 total
+  recovery.test.sh (8), playbook.test.sh (7), project_profile.test.sh (17),
+  dep_audit.test.sh (12) = 117 total
 .github/workflows/test.yml - CI
 ```
 

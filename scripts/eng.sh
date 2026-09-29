@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# eng.sh - Engineering Control Plane CLI v1.1
+# eng.sh - Engineering Control Plane CLI v1.2
 # Main entry point for eng-orchestrator
 # Usage: ./scripts/eng.sh <command> [options]
 # Commands: preview, run, list, show, recover, receipt, registry, state, event, worktree
@@ -57,7 +57,7 @@ case "${1:-}" in
     "$SCRIPT_DIR/gate_check.sh" "$@"
     ;;
   -h|--help|help|*)
-    echo "eng-orchestrator Control Plane v1.1"
+    echo "eng-orchestrator Control Plane v1.2.1"
     echo ""
     echo "Usage: $0 <command> [options]"
     echo ""

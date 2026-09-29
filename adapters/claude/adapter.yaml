@@ -1,7 +1,7 @@
 name: claude
 type: adapter
 description: "Claude adapter (example mapping)"
-version: 1.2.0
+version: 1.2.1
 enabled: true
 
 model_mapping:

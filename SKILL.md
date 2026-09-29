@@ -7,7 +7,7 @@ description: >
   feature, bugfix, refactor, prod work, multi-file. WHEN NOT TO USE: one-line
   typo explanation, pure Q&A, chatting. Persian: "اینو بیلد کن"، "مهندسی حرفه‌ای"،
   "ارکستراسیون کن"، "از صفر بساز".
-version: 1.2.0
+version: 1.2.1
 ---
 
 # eng-orchestrator - Control Plane v1.1
