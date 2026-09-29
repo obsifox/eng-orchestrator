@@ -1,11 +1,16 @@
-# .eng artifacts - ignore generated logs but keep templates
+# .eng - ignore generated but keep templates and knowledge structure
 .eng/artifacts/
 !.eng/artifacts/.gitkeep
 .eng/checkpoint/
 .eng/.persist_test_*
-# Keep templates
+.eng/runs/
+.eng/evidence.md
+.eng/state.json
+# Keep templates and knowledge README
 !.eng/templates/
 !.eng/templates/*
+!.eng/knowledge/
+!.eng/knowledge/**/*
 # OS
 .DS_Store
 # Node
