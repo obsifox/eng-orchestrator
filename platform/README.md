@@ -20,7 +20,9 @@ No dependencies, no install step, no lockfile, no build. Python 3.9 or newer wit
 ./run_tests.sh
 ```
 
-Runs the unit suite and then the content policy over the application source. Both must pass. The suite currently reports 84 tests, and the policy reports 0 findings across 19 files.
+Runs the unit suite and then the content policy over the application source. Both must pass. The suite currently reports 100 tests, and the policy reports 0 findings across 30 files.
+
+The storage tests build their own temporary roots, so the suite never touches `data/` and leaves nothing behind.
 
 ```
 python3 -m unittest discover -s tests -t . -v
@@ -36,6 +38,7 @@ python3 -m unittest discover -s tests -t . -v
 | DNS | Produces a browser-scoped resolution plan for system, custom, DoH and DoT modes. Validates every endpoint and port. |
 | Profiles | Versioned, checksummed, migration-aware, importable and exportable. An import is validated before it can be activated. |
 | Per-site policy | Overrides the profile for a matching host with a deterministic precedence order. |
+| Storage | Profiles, settings and diagnostic exports are written to disk. Imports, activations and deletions survive a restart. |
 | Diagnostics | Reports where the resolved surfaces disagree, at one of three redaction levels. |
 
 ## What it deliberately does not do
@@ -70,7 +73,9 @@ platform/
     diagnostics.py          consistency reporting and redaction
     host.py                 host signals and the honest detector
     catalog.py              offline sample data
+    storage.py              atomic writes, quarantine, settings, index
   ui/                       interface, no build step
+  data/                     runtime state, created on first start, not committed
   tests/test_platform.py    the suite
 ```
 
@@ -95,3 +100,11 @@ Writing comment-free JavaScript and Python is achievable through naming and docu
 **Provenance travels with every value.** Each resolved value carries a source and a confidence, so the interface can mark a configured decision as configured and a derived one as derived.
 
 **Observation times are recorded.** Each pipeline stage reports its own duration and start time, which is what the interface turns into the stage list and what makes a slow stage visible.
+
+**Writes are atomic.** A profile is serialised to a temporary file in the destination directory and renamed over the target. Renaming within a directory is atomic, so a process that dies mid-write leaves the previous file intact rather than a truncated one.
+
+**A corrupt file is quarantined, not ignored.** When a profile fails to parse, or fails validation, or carries a checksum that does not match its contents, it is renamed with a reason and a timestamp and reported in the load result. The application still starts. Silently dropping the file would make a user's configuration vanish with no explanation, and refusing to start would let one bad file make the application unusable.
+
+**Validation has exactly one path.** Files loaded from disk go through the same `ProfileStore.import_payload` that an untrusted paste from the interface goes through. The first version of the storage module checked checksums itself, after `from_payload` had already resealed the profile, so a tampered file loaded silently. Reusing one path removes the second chance to get it wrong.
+
+**The storage root never escapes.** An identifier that passes validation cannot contain a separator, and the resolved path is checked against the root anyway. Validation in one place is a convention; validation at the boundary that turns a string into a path is a guarantee.

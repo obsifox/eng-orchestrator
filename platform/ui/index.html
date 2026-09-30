@@ -135,6 +135,19 @@
         <p class="lede">Each profile is versioned and carries a checksum over its body. An imported profile is validated before it can be activated, and a profile from a newer schema is refused rather than interpreted.</p>
       </div>
       <div class="grid" id="profiles-grid"></div>
+      <h3>Active profile</h3>
+      <p class="lede small">The active profile is written to disk and survives a restart. A profile that is currently active cannot be deleted, so the environment is never left undefined.</p>
+      <div class="button-row">
+        <label class="field inline">
+          <span>Profile</span>
+          <select id="activate-select"></select>
+        </label>
+        <button class="button primary" id="activate-button" type="button">Activate</button>
+        <button class="button" id="delete-button" type="button">Delete</button>
+      </div>
+      <pre class="code" id="activate-result">No change this session.</pre>
+      <h3>Storage</h3>
+      <div class="grid" id="storage-grid"></div>
       <h3>Import</h3>
       <textarea id="import-area" class="code-input" rows="8" spellcheck="false" placeholder="Paste a profile as JSON"></textarea>
       <div class="button-row">
@@ -174,6 +187,14 @@
       </div>
       <div class="grid" id="consistency-grid"></div>
       <div class="findings" id="consistency-findings"></div>
+      <h3>Saved exports</h3>
+      <div class="button-row">
+        <button class="button primary" id="save-report" type="button">Write report to disk</button>
+        <table class="table" id="exports-table">
+          <thead><tr><th>File</th><th>Bytes</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
       <h3>Report</h3>
       <pre class="code tall" id="diagnostics-report"></pre>
     </section>

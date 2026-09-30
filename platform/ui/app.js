@@ -304,20 +304,54 @@ function renderPrivacy(snapshot) {
 }
 
 function renderProfiles() {
+  const active = state.meta.active_profile;
+
   const pieces = state.profiles.map((profile) => {
     const location = profile.latitude === undefined ? "no fixed position" : profile.latitude.toFixed(3) + ", " + profile.longitude.toFixed(3);
-    const tag = profile.valid_checksum ? "checksum valid" : "checksum absent";
+    const tag = profile.identifier === active ? "active" : profile.valid_checksum ? "checksum valid" : "checksum absent";
 
     return card(
       profile.identifier,
       profile.name,
       "mode " + profile.geolocation_mode + " | radius " + profile.radius_m + " m | " + location + " | DNS " + profile.dns_mode,
       tag,
-      profile.valid_checksum ? "ok" : "notice"
+      profile.identifier === active ? "ok" : profile.valid_checksum ? "ok" : "notice"
     );
   });
 
   renderGrid(element("profiles-grid"), pieces);
+
+  const options = state.profiles
+    .map((profile) => '<option value="' + escapeText(profile.identifier) + '">' + escapeText(profile.name) + "</option>")
+    .join("");
+
+  element("activate-select").innerHTML = options;
+  element("activate-select").value = active;
+
+  renderStorage();
+}
+
+function renderStorage() {
+  const storage = state.meta.storage;
+  const load = state.meta.last_load;
+
+  const pieces = [
+    card("Directory", storage.root, "profile and settings files live here", "", ""),
+    card("Persistent", storage.persistent ? "yes" : "no", storage.persistent ? "writes reach the disk" : "this session is memory only", storage.persistent ? "ok" : "warning"),
+    card("Profiles on disk", storage.profiles_on_disk, "excluding the index", "", ""),
+    card("Saved exports", storage.diagnostics_on_disk, "kept to twenty, oldest pruned", "", ""),
+    card("Layout version", storage.layout_version, "", "", "")
+  ];
+
+  if (load && load.quarantined && load.quarantined.length) {
+    pieces.push(card("Quarantined on load", load.quarantined.length, load.quarantined.map((item) => item.identifier + " (" + item.reason + ")").join("; "), "attention", "warn"));
+  }
+
+  if (!storage.persistent && storage.notes && storage.notes.length) {
+    pieces.push(card("Reason", storage.notes[0], "", "", ""));
+  }
+
+  renderGrid(element("storage-grid"), pieces);
 }
 
 function renderPolicies(snapshot) {
@@ -397,9 +431,14 @@ async function refresh(snapshotOverride) {
     renderDns(snapshot);
     renderProfiles();
     await renderDiagnostics();
+    await loadExports();
 
     element("footer").textContent =
-      "engine " + state.meta.engine_version + " | profile schema v" + state.meta.profile_version + " | " + state.meta.counts.timezones + " timezones from the local database | catalogue of " + state.meta.counts.cities + " cities held offline";
+      "engine " + state.meta.engine_version +
+      " | profile schema v" + state.meta.profile_version +
+      " | " + state.meta.counts.timezones + " timezones from the local database" +
+      " | catalogue of " + state.meta.counts.cities + " cities held offline" +
+      " | storage " + (state.meta.storage.persistent ? "persistent at " + state.meta.storage.root : "memory only");
   } catch (error) {
     showFailure(element("overview-grid"), error.message);
     element("state-badge").textContent = "ERROR";
@@ -460,10 +499,73 @@ async function loadProfiles() {
     .map((profile) => '<option value="' + escapeText(profile.identifier) + '">' + escapeText(profile.name) + "</option>")
     .join("");
 
-  const berlin = state.profiles.filter((profile) => profile.identifier === "berlin-wide")[0];
+  const active = state.profiles.filter((profile) => profile.identifier === state.meta.active_profile)[0];
+  const preferred = active || state.profiles.filter((profile) => profile.identifier === "berlin-wide")[0];
 
-  if (berlin) {
-    element("profile-select").value = berlin.identifier;
+  if (preferred) {
+    element("profile-select").value = preferred.identifier;
+  }
+}
+
+async function loadExports() {
+  const listing = await fetchJson("/api/diagnostics/list");
+  const rows = listing.exports.map((entry) => "<tr><td>" + escapeText(entry.name) + "</td><td>" + entry.bytes + "</td></tr>");
+  element("exports-table").querySelector("tbody").innerHTML = rows.join("") || "<tr><td>none yet</td><td>0</td></tr>";
+}
+
+async function loadMeta() {
+  state.meta = await fetchJson("/api/meta");
+}
+
+async function activateProfile(identifier) {
+  try {
+    const result = await fetchJson("/api/profiles/activate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ identifier: identifier })
+    });
+
+    element("activate-result").textContent =
+      "Active profile is now " + result.active_profile + (result.persisted ? ", written to disk." : ". This session is memory only, so it will not survive a restart.");
+
+    await loadMeta();
+    await refresh();
+  } catch (error) {
+    element("activate-result").textContent = "Rejected: " + error.message;
+  }
+}
+
+async function deleteProfile(identifier) {
+  try {
+    const result = await fetchJson("/api/profiles/delete", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ identifier: identifier })
+    });
+
+    element("activate-result").textContent = result.removed ? "Deleted " + identifier + "." : "No profile named " + identifier + ".";
+
+    await loadProfiles();
+    await loadMeta();
+    await refresh();
+  } catch (error) {
+    element("activate-result").textContent = "Rejected: " + error.message;
+  }
+}
+
+async function saveReport() {
+  try {
+    const report = await fetchJson("/api/diagnostics?level=" + encodeURIComponent(state.redaction) + "&persist=true");
+    element("diagnostics-report").textContent = JSON.stringify(report, null, 2);
+
+    const listing = await fetchJson("/api/diagnostics/list");
+    const rows = listing.exports.map((entry) => "<tr><td>" + escapeText(entry.name) + "</td><td>" + entry.bytes + "</td></tr>");
+    element("exports-table").querySelector("tbody").innerHTML = rows.join("") || "<tr><td>none yet</td><td>0</td></tr>";
+
+    await loadMeta();
+    renderStorage();
+  } catch (error) {
+    element("diagnostics-report").textContent = "Could not write the report: " + error.message;
   }
 }
 
@@ -531,7 +633,7 @@ function activateTabs() {
 async function start() {
   activateTabs();
 
-  state.meta = await fetchJson("/api/meta");
+  await loadMeta();
   state.resolvers = (await fetchJson("/api/resolvers")).resolvers;
   state.policies = (await fetchJson("/api/policies")).policies;
 
@@ -552,6 +654,10 @@ async function start() {
     state.redaction = event.target.value;
     renderDiagnostics();
   });
+
+  element("activate-button").addEventListener("click", () => activateProfile(element("activate-select").value));
+  element("delete-button").addEventListener("click", () => deleteProfile(element("activate-select").value));
+  element("save-report").addEventListener("click", () => saveReport());
 
   element("refresh-diagnostics").addEventListener("click", () => renderDiagnostics());
 

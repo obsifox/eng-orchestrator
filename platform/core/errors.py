@@ -77,6 +77,12 @@ class ProfileImportError(ProfileError):
     """An imported profile that failed validation before activation."""
 
 
+class StorageError(EnvironmentError):
+    """A storage operation that could not be completed safely."""
+
+    stage = "storage"
+
+
 class PolicyError(EnvironmentError):
     """A per-site policy that cannot be parsed or applied."""
 

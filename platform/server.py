@@ -34,17 +34,24 @@ from core.geo import RANDOMIZATION_MODES
 from core.host import HostDetector, describe
 from core.locale_engine import LocaleEngine
 from core.profiles import CURRENT_VERSION, GeoProfile, ProfileStore
+from core.storage import PlatformStorage, load_into
 from core.timezone_engine import TimezoneEngine, available_identifiers
 
 UI_DIRECTORY = pathlib.Path(__file__).resolve().parent / "ui"
+DEFAULT_DATA_DIRECTORY = pathlib.Path(__file__).resolve().parent / "data"
 
 MAX_REQUEST_BYTES = 262144
 
 
 class ApplicationState:
-    """Everything the API reads, assembled once at start-up."""
+    """Everything the API reads, assembled once at start-up.
 
-    def __init__(self):
+    Profiles come from disk when disk is available. The shipped defaults are
+    seeded only into an empty store, so a user who deletes one of them does not
+    find it resurrected on the next start.
+    """
+
+    def __init__(self, data_directory=None, persistent=None):
         self.host = describe()
         self.timezone_engine = TimezoneEngine(self.host["timezone"])
         self.locale_engine = LocaleEngine(self.host["locale"] or "en-US")
@@ -53,8 +60,23 @@ class ApplicationState:
         self.dns_engine = DnsEngine()
         self.store = ProfileStore()
 
-        for profile in default_profiles():
-            self.store.add(profile)
+        root = pathlib.Path(data_directory) if data_directory else DEFAULT_DATA_DIRECTORY
+        self.storage = PlatformStorage(root, writable=persistent)
+        self.load_result = load_into(self.store, self.storage)
+
+        if len(self.store) == 0:
+            for profile in default_profiles():
+                self.store.add(profile)
+
+            self.storage.save_all([self.store.get(name) for name in self.store.identifiers()])
+            self.seeded = True
+        else:
+            self.seeded = False
+
+        self.active_profile = str(self.storage.settings.get("active_profile") or "default-environment")
+
+        if self.store.get(self.active_profile) is None:
+            self.active_profile = self.store.identifiers()[0] if len(self.store) else "default-environment"
 
         self.policies = list(DEFAULT_POLICIES)
 
@@ -72,8 +94,7 @@ class ApplicationState:
 
     def profile(self, identifier: str) -> GeoProfile:
         if not identifier:
-            identifiers = self.store.identifiers()
-            identifier = "default" if "default" in identifiers else identifiers[0]
+            identifier = self.active_profile
 
         found = self.store.get(identifier)
 
@@ -88,11 +109,25 @@ class ApplicationState:
 
         return snapshot
 
+    def activate(self, identifier: str) -> dict:
+        profile = self.profile(identifier)
+        self.active_profile = profile.identifier
+        settings = self.storage.save_settings(active_profile=profile.identifier)
+
+        return {"active_profile": profile.identifier, "persisted": self.storage.persistent, "settings": settings}
+
+    def persist_profiles(self) -> None:
+        self.storage.save_all([self.store.get(name) for name in self.store.identifiers()])
+
     def as_dict(self) -> dict:
         return {
             "engine_version": ENGINE_VERSION,
             "profile_version": CURRENT_VERSION,
             "host": self.host,
+            "active_profile": self.active_profile,
+            "storage": self.storage.summary(),
+            "seeded": self.seeded,
+            "last_load": self.load_result.as_dict(),
             "counts": {
                 "profiles": len(self.store),
                 "resolvers": len(self.resolvers),
@@ -192,7 +227,7 @@ def build_handler(state: ApplicationState):
                 return
 
             if route == "/api/environment":
-                snapshot = state.snapshot(one("profile", "default"), one("host"), one("session", "preview"))
+                snapshot = state.snapshot(one("profile", "default-environment"), one("host"), one("session", "preview"))
                 self.send_json(snapshot)
                 return
 
@@ -258,8 +293,20 @@ def build_handler(state: ApplicationState):
                 return
 
             if route == "/api/diagnostics":
-                snapshot = state.last_snapshot if state.last_snapshot else state.snapshot("default", "", "preview")
-                self.send_json(build_report(snapshot, level=one("level", "redacted"), engine_version=ENGINE_VERSION))
+                snapshot = state.last_snapshot if state.last_snapshot else state.snapshot("default-environment", "", "preview")
+                level = one("level", "redacted")
+                report = build_report(snapshot, level=level, engine_version=ENGINE_VERSION)
+
+                if one("persist") == "true":
+                    path = state.storage.write_diagnostic(report, level)
+                    report["written_to"] = path.name if path.name else ""
+                    state.storage.prune_diagnostics(keep=20)
+
+                self.send_json(report)
+                return
+
+            if route == "/api/diagnostics/list":
+                self.send_json({"exports": state.storage.list_diagnostics(), "persistent": state.storage.persistent})
                 return
 
             self.send_error_json(f"no route for {route}", status=404)
@@ -295,6 +342,8 @@ def build_handler(state: ApplicationState):
                 body = payload.get("profile", payload)
 
                 profile = state.store.import_payload(body, strict=strict, require_checksum=require_checksum)
+                state.storage.save_profile(profile)
+                state.persist_profiles()
 
                 self.send_json(
                     {
@@ -302,9 +351,31 @@ def build_handler(state: ApplicationState):
                         "migrations": profile.migrations,
                         "checksum": profile.checksum,
                         "validated": True,
+                        "persisted": state.storage.persistent,
                     },
                     status=201,
                 )
+                return
+
+            if route == "/api/settings":
+                allowed = {"active_profile", "redaction_level", "session_id", "interface"}
+                changes = {key: value for key, value in payload.items() if key in allowed}
+
+                if not changes:
+                    self.send_error_json("no recognised settings in the request", status=400)
+                    return
+
+                if "active_profile" in changes:
+                    profile = state.profile(str(changes["active_profile"]))
+                    changes["active_profile"] = profile.identifier
+                    state.active_profile = profile.identifier
+
+                settings = state.storage.save_settings(**changes)
+                self.send_json({"settings": settings, "persistent": state.storage.persistent})
+                return
+
+            if route == "/api/profiles/activate":
+                self.send_json(state.activate(str(payload.get("identifier", ""))))
                 return
 
             if route == "/api/profiles/validate":
@@ -330,8 +401,21 @@ def build_handler(state: ApplicationState):
                 return
 
             if route == "/api/profiles/delete":
-                removed = state.store.remove(str(payload.get("identifier", "")))
-                self.send_json({"removed": removed}, status=200 if removed else 404)
+                identifier = str(payload.get("identifier", ""))
+
+                if identifier == state.active_profile:
+                    self.send_error_json(
+                        "the active profile cannot be deleted",
+                        status=409,
+                        detail="activate a different profile first, so the environment is never left undefined",
+                    )
+                    return
+
+                removed = state.store.remove(identifier)
+                state.storage.delete_profile(identifier)
+                state.persist_profiles()
+
+                self.send_json({"removed": removed, "persisted": state.storage.persistent}, status=200 if removed else 404)
                 return
 
             if route == "/api/policies/add":

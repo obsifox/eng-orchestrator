@@ -95,7 +95,7 @@ def default_profiles() -> list:
     """
     return [
         GeoProfile(
-            identifier="default",
+            identifier="default-environment",
             name="Default environment",
             geolocation_mode="automatic",
             randomization="none",
@@ -195,6 +195,6 @@ def default_profiles() -> list:
 
 DEFAULT_POLICIES = [
     SitePolicy(pattern="internal.example", scope="subdomain", profile="berlin-wide", notes="Development host pinned to the Berlin environment."),
-    SitePolicy(pattern="localhost", scope="origin", profile="default", notes="Local development keeps the host environment."),
+    SitePolicy(pattern="localhost", scope="origin", profile="default-environment", notes="Local development keeps the host environment."),
     SitePolicy(pattern="docs.example", scope="domain", timezone="UTC", locale="en-US", notes="Documentation is read on a fixed clock."),
 ]

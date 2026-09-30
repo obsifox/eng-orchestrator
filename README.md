@@ -8,7 +8,9 @@
 
 > **Engineering Orchestration Control Plane + Project Profiles + Arena Tournament** — Turns AI agent into adaptive org with state machine, run manager, event log, agent contracts, permissions, model routing, playbook engine, project profiles, preview, recovery, receipt + when answers are bad, 100 sub-agents fight to the death with distinct strategy cards (15 reasoning x 12 workflows x 12 strategies = 2160 combos), attack/defend/judge bracket until one survives.
 
-**v2.3.0 NEW:** `platform/` - a working environment core for the browser platform roadmap. Geo (five providers, uniform-over-disc radius sampling), timezone, locale (five surfaces kept apart), browser-scoped DNS (system, custom, DoH, DoT), versioned profiles with migration and checksums, a ten-stage pipeline, per-site policy precedence and consistency diagnostics, behind a control center interface. Standard library only, 84 tests, and 0 content policy findings across 20 files.
+**v2.3.1:** `platform/` now persists. Profiles, settings and diagnostic exports are written to disk with atomic writes, and a corrupt file is quarantined with a reason instead of vanishing. 100 tests.
+
+**v2.3.0:** `platform/` - a working environment core for the browser platform roadmap. Geo (five providers, uniform-over-disc radius sampling), timezone, locale (five surfaces kept apart), browser-scoped DNS (system, custom, DoH, DoT), versioned profiles with migration and checksums, a ten-stage pipeline, per-site policy precedence and consistency diagnostics, behind a control center interface. Standard library only, 84 tests, and 0 content policy findings across 20 files.
 
 **v2.2.0:** Content policy enforcement. `scripts/policy_scan.py` reads `.eng/policy.yaml` and fails the build on forbidden comment markers, emoji, non-permitted writing systems and prohibited branding. The comment rule is a per-language lexer, not a grep: `https://example.com`, a regex literal and Python floor division are not comments. New `G6_Policy` gate, 34 new asserts, `docs/security/policy-scan.md`.
 

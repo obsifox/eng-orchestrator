@@ -12,6 +12,7 @@ or:
 
 from __future__ import annotations
 
+import json
 import pathlib
 import sys
 import unittest
@@ -50,6 +51,7 @@ from core.errors import (
     ProfileImportError,
     ProfileSchemaError,
     ProfileVersionError,
+    StorageError,
     UnknownTimezoneError,
 )
 from core.geo import (
@@ -66,6 +68,7 @@ from core.geo import (
 )
 from core.locale_engine import LocaleEngine, build_accept_language, normalise_language_tag
 from core.profiles import CURRENT_VERSION, GeoProfile, ProfileStore, compute_checksum, migrate
+from core.storage import PlatformStorage, atomic_write, load_into, serialise
 from core.timezone_engine import (
     TimezoneEngine,
     format_offset,
@@ -482,6 +485,203 @@ class ProfileBehaviour(unittest.TestCase):
     def test_shipped_profiles_are_valid(self):
         for profile in default_profiles():
             self.assertTrue(profile.verify_checksum(), profile.identifier)
+
+
+class StorageBehaviour(unittest.TestCase):
+
+    def setUp(self):
+        import shutil
+        import tempfile
+
+        self.work = pathlib.Path(tempfile.mkdtemp(prefix="platform-test-storage-"))
+        self.addCleanup(shutil.rmtree, self.work, True)
+
+    def test_fresh_root_is_seeded_and_indexed(self):
+        storage = PlatformStorage(self.work)
+        store = ProfileStore()
+
+        for profile in default_profiles():
+            store.add(profile)
+
+        written = storage.save_all([store.get(name) for name in store.identifiers()])
+
+        self.assertEqual(written, len(store))
+        self.assertTrue((self.work / "profiles" / "index.json").exists())
+
+        index = json.loads((self.work / "profiles" / "index.json").read_text(encoding="utf-8"))
+        self.assertEqual(sorted(index["identifiers"]), sorted(store.identifiers()))
+
+    def test_a_profile_survives_a_round_trip_through_disk(self):
+        storage = PlatformStorage(self.work)
+        original = GeoProfile(
+            identifier="round-trip",
+            name="Round trip",
+            geolocation_mode="virtual",
+            latitude=48.8566,
+            longitude=2.3522,
+            radius_m=1200.0,
+            timezone="Europe/Paris",
+        )
+        storage.save_all([original])
+
+        store = ProfileStore()
+        result = load_into(store, storage)
+
+        self.assertEqual(result.quarantined, [])
+        restored = store.get("round-trip")
+        self.assertIsNotNone(restored)
+        self.assertEqual(restored.latitude, original.latitude)
+        self.assertEqual(restored.checksum, original.checksum)
+        self.assertTrue(restored.verify_checksum())
+
+    def test_active_profile_survives_a_restart(self):
+        first = PlatformStorage(self.work)
+        first.save_settings(active_profile="berlin-wide")
+
+        second = PlatformStorage(self.work)
+
+        self.assertEqual(second.settings["active_profile"], "berlin-wide")
+
+    def test_unparsable_file_is_quarantined_and_reported(self):
+        storage = PlatformStorage(self.work)
+        storage.save_all([GeoProfile(identifier="broken", name="Broken")])
+        (self.work / "profiles" / "broken.json").write_text('{"identifier": "broken", "name": ', encoding="utf-8")
+
+        store = ProfileStore()
+        result = load_into(store, storage)
+
+        self.assertEqual(len(result.quarantined), 1)
+        self.assertEqual(result.quarantined[0]["identifier"], "broken")
+        self.assertIn("could not be parsed", result.quarantined[0]["reason"])
+        self.assertTrue(result.quarantined[0]["moved_to"].endswith(".corrupt"))
+        self.assertIsNone(store.get("broken"))
+
+    def test_invalid_payload_is_quarantined_rather_than_loaded(self):
+        storage = PlatformStorage(self.work)
+        (self.work / "profiles" / "invalid.json").write_text(
+            json.dumps({"identifier": "invalid", "name": "Invalid", "profile_version": 99}),
+            encoding="utf-8",
+        )
+
+        store = ProfileStore()
+        result = load_into(store, storage)
+
+        self.assertEqual(len(result.quarantined), 1)
+        self.assertIn("newer than this build supports", result.quarantined[0]["reason"])
+        self.assertTrue(result.quarantined[0]["moved_to"].endswith(".corrupt"))
+        self.assertEqual(len(store), 0)
+
+    def test_a_tampered_checksum_is_caught_on_load(self):
+        storage = PlatformStorage(self.work)
+        profile = GeoProfile(
+            identifier="tampered",
+            name="Tampered",
+            geolocation_mode="virtual",
+            latitude=1.0,
+            longitude=2.0,
+        )
+        storage.save_profile(profile)
+
+        payload = json.loads((self.work / "profiles" / "tampered.json").read_text(encoding="utf-8"))
+        payload["latitude"] = 55.0
+        (self.work / "profiles" / "tampered.json").write_text(json.dumps(payload), encoding="utf-8")
+
+        store = ProfileStore()
+        result = load_into(store, storage)
+
+        self.assertEqual(len(result.quarantined), 1)
+        self.assertIn("checksum", result.quarantined[0]["reason"])
+        self.assertIn("expected sha256:", result.quarantined[0]["reason"])
+        self.assertIsNone(store.get("tampered"))
+        self.assertTrue(result.quarantined[0]["moved_to"].endswith(".corrupt"))
+
+    def test_index_naming_a_missing_file_is_reported_not_fatal(self):
+        storage = PlatformStorage(self.work)
+        atomic_write(
+            self.work / "profiles" / "index.json",
+            serialise({"layout_version": 1, "identifiers": ["ghost"]}),
+        )
+
+        store = ProfileStore()
+        result = load_into(store, storage)
+
+        self.assertIn("ghost", result.missing)
+        self.assertEqual(len(store), 0)
+
+    def test_path_building_refuses_to_leave_the_root(self):
+        storage = PlatformStorage(self.work)
+
+        for identifier in ("../escape", "..", "a/b", "with space", "", ".hidden"):
+            with self.assertRaises(StorageError):
+                storage._profile_path(identifier)
+
+    def test_path_building_accepts_a_valid_identifier(self):
+        storage = PlatformStorage(self.work)
+        path = storage._profile_path("berlin-wide")
+
+        self.assertTrue(str(path).startswith(str(storage.profiles_directory.resolve())))
+        self.assertEqual(path.name, "berlin-wide.json")
+
+    def test_unknown_setting_is_refused(self):
+        storage = PlatformStorage(self.work)
+
+        with self.assertRaises(StorageError):
+            storage.save_settings(invented_preference=True)
+
+    def test_settings_merge_nested_sections(self):
+        storage = PlatformStorage(self.work)
+        storage.save_settings(interface={"last_host": "example.com"})
+        storage.save_settings(interface={"last_tab": "dns"})
+
+        reloaded = PlatformStorage(self.work)
+
+        self.assertEqual(reloaded.settings["interface"]["last_host"], "example.com")
+        self.assertEqual(reloaded.settings["interface"]["last_tab"], "dns")
+
+    def test_corrupt_settings_fall_back_to_defaults(self):
+        storage = PlatformStorage(self.work)
+        (self.work / "settings" / "settings.json").write_text("{not json", encoding="utf-8")
+
+        reloaded = PlatformStorage(self.work)
+
+        self.assertEqual(reloaded.settings["active_profile"], "default-environment")
+
+    def test_atomic_write_leaves_no_temporary_file_behind(self):
+        storage = PlatformStorage(self.work)
+        target = self.work / "profiles" / "atomic.json"
+        atomic_write(target, b'{"identifier": "atomic"}\n')
+
+        leftovers = [path.name for path in (self.work / "profiles").iterdir() if path.name.startswith(".atomic")]
+        self.assertEqual(leftovers, [])
+        self.assertEqual(json.loads(target.read_text(encoding="utf-8"))["identifier"], "atomic")
+
+    def test_diagnostic_export_is_written_and_pruned(self):
+        storage = PlatformStorage(self.work)
+
+        for index in range(5):
+            storage.write_diagnostic({"index": index}, f"redacted-{index}")
+
+        self.assertEqual(len(storage.list_diagnostics()), 5)
+        removed = storage.prune_diagnostics(keep=2)
+        self.assertEqual(removed, 3)
+        self.assertEqual(len(storage.list_diagnostics()), 2)
+
+    def test_storage_reports_when_it_cannot_persist(self):
+        storage = PlatformStorage(self.work, writable=False)
+
+        self.assertFalse(storage.persistent)
+        self.assertEqual(storage.save_all([GeoProfile(identifier="x", name="X")]), 0)
+        self.assertTrue(storage.notes)
+        self.assertIn("memory", storage.notes[0])
+
+    def test_summary_reports_the_layout(self):
+        storage = PlatformStorage(self.work)
+        storage.save_all([GeoProfile(identifier="one", name="One")])
+        summary = storage.summary()
+
+        self.assertTrue(summary["persistent"])
+        self.assertEqual(summary["layout_version"], 1)
+        self.assertEqual(summary["profiles_on_disk"], 1)
 
 
 class PolicyPrecedence(unittest.TestCase):

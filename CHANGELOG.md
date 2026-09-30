@@ -2,6 +2,26 @@
 
 All notable changes to eng-orchestrator skill.
 
+## 2.3.1 - 2026-09-30
+### Added - Platform persistence and recovery
+- **`platform/core/storage.py`:** Profiles, settings and diagnostic exports now live on disk in the layout the roadmap specifies (section 39): `profiles/index.json`, `profiles/<identifier>.json`, `settings/settings.json`, `diagnostics/`. Imported profiles, the active profile and saved reports survive a restart.
+- **Atomic writes:** a file is serialised to a temporary in the destination directory and renamed over the target, so a process that dies mid-write leaves the previous file intact rather than a truncated one.
+- **Quarantine rather than silence:** a file that cannot be parsed, fails validation, or carries a checksum that does not match its contents is renamed with a reason and a timestamp, reported in the load result, and the application still starts.
+- **Path building refuses to leave the root:** an identifier is validated and the resolved path is checked against the profiles directory, because the boundary that turns a string into a path should not depend on a validator elsewhere remaining correct.
+- **Settings:** active profile, redaction level and interface state, merged rather than replaced so a write of one section does not discard another.
+- **New API routes:** `POST /api/profiles/activate`, `POST /api/settings`, `GET /api/diagnostics/list`, and `persist=true` on `GET /api/diagnostics` to write a report to disk. Deleting the active profile is refused, so the environment is never left undefined.
+- **Interface:** an active-profile selector with activate and delete, a storage panel showing the directory, whether writes reach the disk, and anything quarantined on load, and a saved-exports table.
+- **Tests:** 16 storage tests added, suite total 100.
+
+### Fixed during development
+- **`storage.load()` did not catch a tampered profile file.** It compared the profile's checksum after `GeoProfile.from_payload` had already resealed it, so the comparison was between two freshly computed values and always agreed. Payloads now go through `ProfileStore.import_payload`, which is the same path an untrusted paste takes, so there is one validation path rather than two that can disagree.
+- **Settings on disk were ignored at start-up.** `PlatformStorage.__init__` created the directories but never read `settings.json`, so a restart lost the active profile.
+- **Diagnostic exports overwrote each other.** Filenames were built from a one-second timestamp with digits stripped from the label, so several exports inside the same second resolved to one name and all but the last were lost.
+- **The shipped `default` profile used a reserved identifier.** `validate_identifier` reserves `default`, so the profile could not survive a round trip through its own schema. It is now `default-environment`; the reservation is unchanged, because a user profile should not be able to shadow the name the application falls back to.
+
+### Notes
+- Performance has still not been measured. Stage timings are recorded per resolution and shown in the interface, which is what a benchmark would need, but no benchmark has been run and no performance claim is made.
+
 ## 2.3.0 - 2026-09-30
 ### Added - Browser Platform: Environment Core
 - **`platform/`:** A working implementation of the environment resolution layer the browser platform roadmap describes, plus a control center interface. Dependency-free, standard library only, no build step and no lockfile.
