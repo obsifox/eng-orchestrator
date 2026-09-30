@@ -62,7 +62,15 @@ jobs:
 
       - name: Exercise the G6_Policy gate
         run: |
+          set +e
           ./scripts/gate_check.sh G6_Policy
+          G6=$?
+          set -e
+          echo "G6_Policy exit=$G6"
+          if [ "$G6" != "3" ]; then
+            echo "FAIL: expected NOT APPLICABLE (3), this repository has no .eng/policy.yaml"
+            exit 1
+          fi
           echo "G6_Policy is NOT APPLICABLE in this repository, as designed"
 
       - name: Run arena tests (20) - v2.0
