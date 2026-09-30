@@ -1,0 +1,28 @@
+scope:
+  include:
+    - "tests/fixtures/policy/**"
+  exclude:
+    - "**/.git/**"
+comments:
+  enabled: true
+  forbid_markers:
+    - slash_line
+    - slash_block
+emoji:
+  enabled: true
+  extended: false
+language:
+  enabled: true
+  forbid_scripts:
+    - arabic
+    - cjk
+    - cyrillic
+    - hangul
+branding:
+  enabled: true
+  case_sensitive: false
+  word_boundary: false
+  prohibited:
+    - ObsiFox
+  allow_paths:
+    - "tests/fixtures/policy/branding-allowed/**"

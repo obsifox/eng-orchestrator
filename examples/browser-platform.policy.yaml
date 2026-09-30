@@ -1,0 +1,71 @@
+# Content policy for the browser platform described by the master roadmap.
+# Realises sections 47 (forbidden comments), 48 (English only), 49 (no emoji)
+# and 50 (branding) as executable checks instead of prose.
+
+scope:
+  exclude:
+    - "**/.git/**"
+    - "**/node_modules/**"
+    - "**/dist/**"
+    - "**/build/**"
+    - "**/target/**"
+    - "tests/fixtures/i18n/**"
+    - "tests/fixtures/unicode/**"
+    - "tests/fixtures/branding-allowed/**"
+
+comments:
+  enabled: true
+  forbid_markers:
+    - slash_line
+    - slash_block
+  languages:
+    - javascript
+    - typescript
+    - jsx
+    - tsx
+    - c
+    - cpp
+    - objc
+    - java
+    - kotlin
+    - csharp
+    - go
+    - swift
+    - rust
+    - css
+    - scss
+    - sql
+    - gradle
+
+emoji:
+  enabled: true
+  extended: false
+
+language:
+  enabled: true
+  forbid_scripts:
+    - arabic
+    - hebrew
+    - cyrillic
+    - greek
+    - cjk
+    - hiragana
+    - katakana
+    - hangul
+    - thai
+    - devanagari
+    - armenian
+    - georgian
+  forbid_accented_latin: false
+
+branding:
+  enabled: true
+  case_sensitive: false
+  word_boundary: false
+  prohibited:
+    - ObsiFox
+  allow_paths:
+    - "docs/legal/**"
+    - "application/about/**"
+    - LICENSE
+    - README.md

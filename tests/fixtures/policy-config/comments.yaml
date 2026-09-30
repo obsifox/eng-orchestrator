@@ -1,0 +1,16 @@
+scope:
+  include:
+    - "tests/fixtures/policy/**"
+  exclude:
+    - "**/.git/**"
+comments:
+  enabled: true
+  forbid_markers:
+    - slash_line
+    - slash_block
+emoji:
+  enabled: false
+language:
+  enabled: false
+branding:
+  enabled: false

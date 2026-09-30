@@ -1,0 +1,19 @@
+scope:
+  include:
+    - "tests/fixtures/policy/**"
+  exclude:
+    - "**/.git/**"
+    - "tests/fixtures/policy/i18n/**"
+comments:
+  enabled: false
+emoji:
+  enabled: false
+language:
+  enabled: true
+  forbid_scripts:
+    - arabic
+    - cjk
+    - cyrillic
+    - hangul
+branding:
+  enabled: false

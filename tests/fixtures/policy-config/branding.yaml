@@ -1,0 +1,19 @@
+scope:
+  include:
+    - "tests/fixtures/policy/**"
+  exclude:
+    - "**/.git/**"
+comments:
+  enabled: false
+emoji:
+  enabled: false
+language:
+  enabled: false
+branding:
+  enabled: true
+  case_sensitive: false
+  word_boundary: false
+  prohibited:
+    - ObsiFox
+  allow_paths:
+    - "tests/fixtures/policy/branding-allowed/**"

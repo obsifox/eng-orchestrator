@@ -1,0 +1,16 @@
+name: browser-platform
+kind: gecko-browser
+
+commands:
+  build: ./mach build
+  test: ./mach test
+  lint: ./mach lint
+
+gates:
+  extras:
+    - name: reproducible_build
+      command: ./build/verify_reproducibility.sh
+      required: false
+
+secret_scan:
+  allow: .eng/secret_scan.allow

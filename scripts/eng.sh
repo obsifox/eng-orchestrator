@@ -84,7 +84,7 @@ case "${1:-}" in
     echo "  receipt generate --run RUN - Generate receipt.json"
     echo "  registry {discover|inspect|validate|load|disable} - Skill registry"
     echo "  playbook {compose|list} - Playbook engine (12 workflows incl arena + 15 domains)"
-    echo "  gate <gate> [--no-run] - Gate engine (G0_Build, G1_Tests, G2_Lens, G3_Security, G4_Release, G5_Project)"
+    echo "  gate <gate> [--no-run] - Gate engine (G0_Build, G1_Tests, G2_Lens, G3_Security, G4_Release, G5_Project, G6_Policy)"
     echo "  knowledge {add|validate|promote-check|list|check} - Structured knowledge"
     echo "  cost {record|show} --run RUN --metric NAME --value VAL - Cost telemetry"
     echo "  project-profile {--check|--help} - Project profile validation (v1.2)"

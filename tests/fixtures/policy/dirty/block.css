@@ -1,0 +1,5 @@
+.panel {
+  /* forbidden block comment in css */
+  color: #ffffff;
+}
+// two slashes are not a comment in plain css

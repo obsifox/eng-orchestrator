@@ -1,4 +1,4 @@
-name: Eng Orchestrator CI - Full Suite v2.1 (Project Profiles + Arena)
+name: Eng Orchestrator CI - Full Suite v2.2 (Policy Enforcement)
 
 on:
   push:
@@ -38,6 +38,32 @@ jobs:
 
       - name: Run dependency audit tests (12 asserts) - v1.2.1
         run: ./tests/dep_audit.test.sh
+
+      - name: Run policy scan tests (34 asserts) - v2.2
+        run: ./tests/policy_scan.test.sh
+
+      - name: Validate the policy template and the browser platform example
+        run: |
+          python3 scripts/policy_scan.py --config .eng/templates/policy.yaml --check
+          python3 scripts/policy_scan.py --config examples/browser-platform.policy.yaml --check
+
+      - name: Run the policy scanner against the fixtures it is specified against
+        run: |
+          set +e
+          python3 scripts/policy_scan.py --config tests/fixtures/policy-config/all-dirty.yaml --root .
+          DIRTY=$?
+          python3 scripts/policy_scan.py --config tests/fixtures/policy-config/all-clean.yaml --root .
+          CLEAN=$?
+          set -e
+          echo "dirty exit=$DIRTY clean exit=$CLEAN"
+          if [ "$DIRTY" != "1" ]; then echo "FAIL: the dirty fixture tree must report violations"; exit 1; fi
+          if [ "$CLEAN" != "0" ]; then echo "FAIL: the clean fixture tree must pass"; exit 1; fi
+          echo "Policy scanner fixture matrix PASS"
+
+      - name: Exercise the G6_Policy gate
+        run: |
+          ./scripts/gate_check.sh G6_Policy
+          echo "G6_Policy is NOT APPLICABLE in this repository, as designed"
 
       - name: Run arena tests (20) - v2.0
         run: |

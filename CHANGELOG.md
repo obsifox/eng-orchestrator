@@ -2,6 +2,30 @@
 
 All notable changes to eng-orchestrator skill.
 
+## 2.2.0 - 2026-09-30
+### Added - Content Policy Enforcement + G6_Policy Gate
+- **`scripts/policy_scan.py`:** Enforces `.eng/policy.yaml` across four rules - `comments` (forbidden comment markers), `emoji`, `language` (non-permitted writing systems) and `branding` (prohibited organisation strings outside allow paths). Dependency-free, reuses the YAML subset parser from `project_profile.py`.
+- **Language-aware comment lexer:** The comment rule is a lexer, not a grep. Each dialect declares which markers it actually has (javascript/typescript/c/cpp/rust/go/java/csharp/kotlin/swift/scala/dart/php/gradle = `//` + `/* */`, rust/swift/scala nest, css = `/* */` only, scss/sass/less/jsonc = both, sql = `--` + `/* */`, python/ruby/shell/yaml/toml/ini/r/makefile/dockerfile = `#`). Strings, template literals and regular expression literals are consumed before any marker is reported, so `https://example.com`, `/^https?:\/\/x$/`, `width / 2` and Python `total // count` are never findings. Regex-vs-division uses the standard preceding-token heuristic; its failure mode is a missed finding, never a fabricated one.
+- **Emoji rule:** Pictographic blocks U+1F000-U+1FAFF, U+2600-U+27BF, U+2B00-U+2BFF, U+2300-U+23FF, the emoji variation selector U+FE0F and the individual emoji-presentation codepoints. Copyright, registered and trade mark signs, arrows and geometric shapes stay out of the core set because license files and architecture diagrams legitimately use them; `emoji.extended: true` adds them.
+- **Language rule:** 29 writing systems by codepoint range (Arabic, Hebrew, Cyrillic, Greek, CJK, Hiragana, Katakana, Hangul, Thai, Devanagari, Armenian, Georgian, Khmer, Lao, Myanmar, Tamil, Telugu, Bengali, Gujarati, Gurmukhi, Kannada, Malayalam, Sinhala, Ethiopic, Tibetan, Mongolian, Cherokee, Syriac, Thaana). `forbid_accented_latin` adds Latin-1 Supplement and Latin Extended-A. Documented honestly as a script check, not a language check: ASCII German and Dutch are not detectable this way.
+- **Branding rule:** Case-insensitive substring matching by default, optional word boundaries, `allow_paths` globs for legal attribution.
+- **`scripts/policy_scan.sh`:** Wrapper writing `.eng/artifacts/policy_scan.log` with a `RESULT:` line and trailing `EXIT_CODE=`, the contract `gate_check.sh` reads.
+- **`G6_Policy` gate:** Part of `gate_check.sh all`. NOT APPLICABLE when `.eng/policy.yaml` is absent - a repository that never adopted a content policy is not failing one, and NOT APPLICABLE does not drag the overall verdict down.
+- **Exit codes:** 0 PASS, 1 violations, 3 NOT APPLICABLE, 4 empty config, 5 malformed config or unknown marker/script name, 6 internal error.
+- **Config:** `.eng/templates/policy.yaml` template, `examples/browser-platform.policy.yaml` filled-in example, `examples/browser-platform.project.yaml`.
+- **Fixtures:** `tests/fixtures/policy/dirty/` and `clean/` prove both directions - a URL, a regex literal, division, CSS `//` and Python floor division must not be reported, while a JS line comment, a JS block comment, a CSS block comment, a nested Rust block comment, a hash comment under a hash policy, emoji, four writing systems and a case-varied brand string must all be reported.
+- **Tests:** `tests/policy_scan.test.sh`, 34 asserts. Suite total 137 -> 171 across 9 suites.
+- **Docs:** `docs/security/policy-scan.md` covering the dialect table, the regex heuristic and its failure mode, the emoji ranges, the language rule's limits, exit codes and the gate contract.
+- **CI:** Three new steps - policy scan tests, template and example validation, and the dirty/clean fixture matrix asserting exit 1 and exit 0 respectively.
+
+### Fixed
+- `as_list` in `policy_scan.py` normalises an absent key, an empty mapping and an empty sequence to "nothing configured". Without this, an empty `include:` key parsed to `{}`, became a one-element glob list matching no file, and a scan of zero files would have reported PASS.
+- `scan_comments` had the block-comment span duplicated across the forbidden and not-forbidden branches. The span is now scanned once and only the reporting is conditional, so the two paths cannot drift. Behaviour is unchanged and covered by P11 (nested Rust block comment is one finding) and P13.
+
+### Notes
+- `eng-orchestrator` does not adopt `.eng/policy.yaml`. This repository uses `#` comments, pictographs in test output and documentation, Persian trigger phrases in `SKILL.md` and the organisation name in GitHub URLs. Applying the browser platform example policy to this tree yields 374 findings across 198 files, none of which is a defect here. The scanner is a tool a project adopts, not a rule the tool imposes.
+- CI installs `pyyaml` for other suites; `policy_scan.py` itself has no third-party dependency and runs on a bare `python3`.
+
 ## 2.1.0 - 2026-09-29
 ### Added - Merged v1.2.1 + v2.0.0 -> v2.1.0 (Major)
 - **Merge:** v1.2.0 (project profiles, PHP detection, G5_Project, secret allow list) + v1.2.1 (dep audit PHP/nested, timezone-aware, secret allow full log) + v2.0.0 (arena tournament) = v2.1.0. Resolves rebase conflict, preserves all features.

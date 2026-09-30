@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# gate_check.sh - Executable gate checker v1.0.1
+# gate_check.sh - Executable gate checker v1.0.2
 # Fix: No gate reads state.json for PASS. Only real command outputs.
 # Usage: ./scripts/gate_check.sh <gate> [--no-run] [--state .eng/state.json] [--evidence .eng/evidence.md]
-# Gates: G0_Build, G1_Tests, G2_Lens, G3_Security, G4_Release, G5_Project, all
+# Gates: G0_Build, G1_Tests, G2_Lens, G3_Security, G4_Release, G5_Project, G6_Policy, all
 # Flags: --no-run = do not re-execute build/test, only inspect existing logs (for testing)
 # Exit codes: 0 PASS, 1 FAIL, 2 NOT TESTED, 3 NOT APPLICABLE, 4 error
 set -uo pipefail
@@ -22,7 +22,7 @@ while [[ $# -gt 0 ]]; do
     --no-run) NO_RUN=1; shift ;;
     -h|--help)
       echo "Usage: $0 <gate> [--no-run] [--state <json>] [--evidence <md>]"
-      echo "Gates: G0_Build, G1_Tests, G2_Lens, G3_Security, G4_Release, G5_Project, all"
+      echo "Gates: G0_Build, G1_Tests, G2_Lens, G3_Security, G4_Release, G5_Project, G6_Policy, all"
       echo "  --no-run: skip re-execution, only inspect logs (useful for tests)"
       echo "Exit 0 PASS, 1 FAIL, 2 NOT TESTED, 3 NOT_APPLICABLE"
       echo ""
@@ -286,11 +286,60 @@ check_gate() {
       return 0
       ;;
 
+    G6_Policy|policy)
+      # Content policy from `.eng/policy.yaml` (v2.2). Comments banned by prose in a
+      # roadmap are not enforced; a scanner that fails the pipeline is. policy_scan.py
+      # owns the lexing, this gate owns the verdict, and the verdict comes from the log.
+      echo "Checking G6 Policy..."
+      local policy_config=".eng/policy.yaml"
+      local policy_log=".eng/artifacts/policy_scan.log"
+
+      if [ ! -f "$policy_config" ]; then
+        echo "no $policy_config -> NOT APPLICABLE"
+        return 3
+      fi
+
+      if [ "$NO_RUN" -eq 0 ]; then
+        echo "Running content policy scan: $policy_config"
+        mkdir -p .eng/artifacts
+        "$SCRIPT_DIR/policy_scan.sh" --config "$policy_config" --out "$policy_log" > /dev/null 2>&1
+      else
+        echo "--no-run: skipping policy scan execution"
+      fi
+
+      if [ ! -f "$policy_log" ]; then
+        echo "no policy scan log $policy_log -> NOT TESTED"
+        return 2
+      fi
+
+      local policy_exit
+      policy_exit=$(get_exit "$policy_log")
+      echo "Policy scan exit code: ${policy_exit:-unknown} (log: $policy_log)"
+
+      if grep -q 'RESULT: NOT APPLICABLE' "$policy_log"; then
+        echo "G6 -> NOT APPLICABLE (scan reported no config in scope)"
+        return 3
+      fi
+      if grep -q 'RESULT: FAIL' "$policy_log"; then
+        echo "FAIL: content policy violations"
+        tail -n 25 "$policy_log"
+        return 1
+      fi
+      if ! grep -q 'RESULT: PASS' "$policy_log"; then
+        echo "G6 -> NOT TESTED (scan produced no RESULT line)"
+        tail -n 25 "$policy_log"
+        return 2
+      fi
+
+      echo "G6 -> PASS"
+      return 0
+      ;;
+
     all)
       echo "Checking all gates..."
       local overall=0
       local results=()
-      for gate in G0_Build G1_Tests G2_Lens G3_Security G4_Release G5_Project; do
+      for gate in G0_Build G1_Tests G2_Lens G3_Security G4_Release G5_Project G6_Policy; do
         echo "--- $gate ---"
         check_gate "$gate"
         local ec=$?

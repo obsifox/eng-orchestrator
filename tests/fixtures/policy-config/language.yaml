@@ -1,0 +1,18 @@
+scope:
+  include:
+    - "tests/fixtures/policy/**"
+  exclude:
+    - "**/.git/**"
+comments:
+  enabled: false
+emoji:
+  enabled: false
+language:
+  enabled: true
+  forbid_scripts:
+    - arabic
+    - cjk
+    - cyrillic
+    - hangul
+branding:
+  enabled: false
