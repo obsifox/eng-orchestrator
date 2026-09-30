@@ -1,0 +1,3 @@
+# Runtime state. Profiles and settings the user creates belong on disk, not in
+# the repository; seeded defaults are written on first start from catalog.py.
+data/

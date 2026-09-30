@@ -1,4 +1,4 @@
-name: Eng Orchestrator CI - Full Suite v2.1 (Project Profiles + Arena)
+name: Eng Orchestrator CI - Full Suite v2.2 (Policy Enforcement)
 
 on:
   push:
@@ -38,6 +38,89 @@ jobs:
 
       - name: Run dependency audit tests (12 asserts) - v1.2.1
         run: ./tests/dep_audit.test.sh
+
+      - name: Run policy scan tests (34 asserts) - v2.2
+        run: ./tests/policy_scan.test.sh
+
+      - name: Validate the policy template and the browser platform example
+        run: |
+          python3 scripts/policy_scan.py --config .eng/templates/policy.yaml --check
+          python3 scripts/policy_scan.py --config examples/browser-platform.policy.yaml --check
+
+      - name: Run the policy scanner against the fixtures it is specified against
+        run: |
+          set +e
+          python3 scripts/policy_scan.py --config tests/fixtures/policy-config/all-dirty.yaml --root .
+          DIRTY=$?
+          python3 scripts/policy_scan.py --config tests/fixtures/policy-config/all-clean.yaml --root .
+          CLEAN=$?
+          set -e
+          echo "dirty exit=$DIRTY clean exit=$CLEAN"
+          if [ "$DIRTY" != "1" ]; then echo "FAIL: the dirty fixture tree must report violations"; exit 1; fi
+          if [ "$CLEAN" != "0" ]; then echo "FAIL: the clean fixture tree must pass"; exit 1; fi
+          echo "Policy scanner fixture matrix PASS"
+
+      - name: Exercise the G6_Policy gate
+        run: |
+          set +e
+          ./scripts/gate_check.sh G6_Policy
+          G6=$?
+          set -e
+          echo "G6_Policy exit=$G6"
+          if [ "$G6" != "3" ]; then
+            echo "FAIL: expected NOT APPLICABLE (3), this repository has no .eng/policy.yaml"
+            exit 1
+          fi
+          echo "G6_Policy is NOT APPLICABLE in this repository, as designed"
+
+      - name: Run platform environment core tests (v2.3)
+        run: |
+          cd platform
+          python3 -m unittest discover -s tests -t . -v
+          cd ..
+
+      - name: Enforce the platform content policy over the platform source
+        run: |
+          python3 scripts/policy_scan.py --config platform/policy.yaml --root platform
+          echo "Platform source satisfies its own content policy"
+
+      - name: Exercise the platform end to end
+        run: |
+          cd platform
+          python3 - <<'PY'
+          import json
+          import sys
+
+          sys.path.insert(0, ".")
+
+          from core.catalog import RESOLVERS, default_profiles
+          from core.dns_engine import DnsEngine
+          from core.environment import EnvironmentPipeline
+          from core.locale_engine import LocaleEngine
+          from core.timezone_engine import TimezoneEngine
+
+          pipeline = EnvironmentPipeline(
+              timezone_engine=TimezoneEngine("Europe/Berlin"),
+              locale_engine=LocaleEngine("en-US"),
+              dns_engine=DnsEngine(),
+              resolvers={resolver.identifier: resolver for resolver in RESOLVERS},
+          )
+
+          profile = [item for item in default_profiles() if item.identifier == "berlin-wide"][0]
+          snapshot = pipeline.run(profile, host="internal.example")
+
+          assert snapshot["failed_stage"] is None, snapshot["failed_stage"]
+          assert snapshot["geo"]["source"] == "virtual", "a virtual profile must not report a measured source"
+          assert snapshot["geo"]["radius_m"] > 0
+          assert snapshot["state"] == "MANUAL", snapshot["state"]
+          assert len(snapshot["stages"]) == 10, len(snapshot["stages"])
+
+          report = json.dumps(snapshot)
+          assert "physical" not in report, "a configured environment must not carry a measured source"
+
+          print("platform end to end OK, state", snapshot["state"])
+          PY
+          cd ..
 
       - name: Run arena tests (20) - v2.0
         run: |

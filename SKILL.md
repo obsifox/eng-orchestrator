@@ -1,19 +1,21 @@
 ---
 name: eng-orchestrator
 description: >
-  Master engineering orchestration control plane v2.1 with state machine (17 states),
+  Master engineering orchestration control plane v2.2 with state machine (17 states),
   run manager, event log, 6 agent contracts, permissions, model routing, playbook engine
   (12 workflows inc arena + 15 domains), project profiles (.eng/project.yaml), G5_Project
-  gate, secret allow list, PHP detection, preview, recovery, receipt + Arena tournament:
-  100 sub-agents compete with distinct strategy cards (15x12x12=2160 combos), attack/defend/judge
-  bracket until one survives. WHEN TO USE: any code task beyond Q&A, feature, bugfix, refactor,
-  prod work, multi-file, OR when user says bad answer/try again/do better OR explicitly /arena.
+  gate, G6_Policy content policy gate (forbidden comments via language-aware lexer, emoji,
+  writing systems, branding), secret allow list, PHP detection, preview, recovery, receipt
+  + Arena tournament: 100 sub-agents compete with distinct strategy cards (15x12x12=2160
+  combos), attack/defend/judge bracket until one survives. WHEN TO USE: any code task beyond
+  Q&A, feature, bugfix, refactor, prod work, multi-file, enforcing a content or style policy,
+  OR when user says bad answer/try again/do better OR explicitly /arena.
   WHEN NOT TO USE: one-line typo, pure Q&A. Persian: "اینو بیلد کن"، "مهندسی حرفه‌ای"،
   "ارکستراسیون کن"، "از صفر بساز"، "مسابقه بده"، "رقابت"، "arena".
-version: 2.1.0
+version: 2.2.0
 ---
 
-# eng-orchestrator v2.1 - Control Plane + Project Profiles + Arena
+# eng-orchestrator v2.2 - Control Plane + Project Profiles + Content Policy + Arena
 
 > Evidence > Claims, Tournament > Single-Shot when uncertain, State > Conversation, Contracts > Personas, Least Privilege > Unlimited, Deterministic Gates > Subjective.
 
@@ -60,7 +62,8 @@ Run `scripts/baseline.sh` BEFORE change. Produces `baseline_build.log` and `base
 
 ## 6. Build & Hard Gates (Executable Only)
 - Use `scripts/lib_run.sh`: `run_step current build <cmd>` -> log with `EXIT_CODE`. Resolution order: `.eng/project.yaml` commands -> package.json -> composer.json -> tests/run.php -> go.mod/pytest/Makefile/gradlew -> phpunit.xml. PHP checked before pytest (fixes WordPress).
-- Gates: G0 Build `build exit 0`, G1 Tests `tests >= baseline AND no new failures`, G2 Lens `no open HIGH+`, G3 Security `secret_scan exit 0 AND no HIGH vuln` (allow list `.eng/secret_scan.allow` with reasons), G4 Release `artifact hash verified`, G5_Project `project extras PASS`.
+- Gates: G0 Build `build exit 0`, G1 Tests `tests >= baseline AND no new failures`, G2 Lens `no open HIGH+`, G3 Security `secret_scan exit 0 AND no HIGH vuln` (allow list `.eng/secret_scan.allow` with reasons), G4 Release `artifact hash verified`, G5_Project `project extras PASS`, G6_Policy `content policy clean`.
+- G6_Policy (v2.2): `scripts/policy_scan.py` + `policy_scan.sh` enforce `.eng/policy.yaml` - forbidden comment markers (language-aware lexer, so `https://`, regex literals and Python floor division are not comments), emoji, non-permitted writing systems, prohibited branding outside allow paths. No `.eng/policy.yaml` -> NOT APPLICABLE, a repo that never adopted a policy is not failing one. See `docs/security/policy-scan.md`.
 - Check: `./scripts/gate_check.sh <gate> [--no-run]`. Arena: rubric scoring replaces lens review, champion must pass secret_scan. See `references/tiers.md`.
 
 ## 7. Review / Rework Bounded Loop + Arena Attack/Defend/Judge
@@ -104,14 +107,18 @@ Stop when: requirements met + acceptance + required gates PASS/NA + no BLOCKED H
 ## 14. Final Delivery
 Report from `references/report-template.md` + `receipt.json`. User language = user's language. For arena, include winning solution full + why won + card + rounds + baseline comparison. Record lessons in structured knowledge per promotion rule.
 
-## File Map v2.1
+## File Map v2.2
 - `config/state_machine.yaml`, `permissions.yaml`, `model_policy.yaml`, `arena.yaml` (v2.0)
 - `agents/*.yaml` - 6 contracts
 - `workflows/*.yaml` (12 incl arena) - work types, `domains/*.yaml` (15) - overlays
 - `skills/arena/` - arena subskill: bracket.py (1235 lines), strategies.json (2160 cards), rubric.md, SKILL.md
-- `.eng/project.yaml` template, `.eng/templates/project.yaml`, `.eng/secret_scan.allow` (v1.2)
+- `.eng/project.yaml` template, `.eng/templates/project.yaml`, `.eng/secret_scan.allow` (v1.2), `.eng/templates/policy.yaml` (v2.2)
 - `adapters/*/` - provider abstraction with adapter.py + yaml
-- `scripts/` control plane: state_machine.sh, event_log.sh, run_manager.sh, playbook_engine.sh, preview.sh, recovery.sh, worktree.sh, receipt.sh, permission_check.sh, skill_registry.sh, eng.sh, arena.sh (v2.0), project_profile.py/.sh (v1.2), cost_telemetry.sh, knowledge.sh, lib_run.sh, detect_env.sh, baseline.sh, gate_check.sh, secret_scan.sh, dep_audit.sh, report_lint.sh
-- `docs/` - architecture (incl project-profile.md, arena/overview.md), state-machine, agents, workflows, security, recovery, evaluation, adapters, audit
+- `scripts/` control plane: state_machine.sh, event_log.sh, run_manager.sh, playbook_engine.sh, preview.sh, recovery.sh, worktree.sh, receipt.sh, permission_check.sh, skill_registry.sh, eng.sh, arena.sh (v2.0), project_profile.py/.sh (v1.2), cost_telemetry.sh, knowledge.sh, lib_run.sh, detect_env.sh, baseline.sh, gate_check.sh, secret_scan.sh, dep_audit.sh, report_lint.sh, policy_scan.py/.sh (v2.2)
+- `docs/` - architecture (incl project-profile.md, arena/overview.md), state-machine, agents, workflows, security (incl policy-scan.md v2.2), recovery, evaluation, adapters, audit
 - `references/` - tiers, lenses, playbooks (backward compat)
+- `tests/fixtures/policy/` + `tests/fixtures/policy-config/` - scanner fixtures and the configs that select them (v2.2)
+- `platform/` - NEW v2.3: a worked example of the control plane applied to a real project. Environment core (geo, timezone, locale, DNS, profiles, ten-stage pipeline, diagnostics) + control center interface, standard library only, `platform/policy.yaml` enforced by G6 over its own source, 84 tests via `platform/run_tests.sh`
+- `examples/browser-platform.policy.yaml` - a filled-in policy for a project that bans slash comments, emoji, non-Latin scripts and organisation branding (v2.2)
 - `.eng/knowledge/` - structured knowledge, `evals/` - 151 scenarios (108 unit + 43 simulated) v2.0, 117 v1.2
+- `tests/` - 171 asserts across 9 suites: gates 15, state_machine 37, permissions 21, recovery 8, playbook 7, project_profile 17, dep_audit 12, arena 20, policy_scan 34

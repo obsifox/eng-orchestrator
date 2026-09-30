@@ -1,14 +1,20 @@
-# 🛡️ eng-orchestrator v2.1 - Control Plane + Project Profiles + Arena
+# 🛡️ eng-orchestrator v2.2 - Control Plane + Project Profiles + Content Policy + Arena
 
 [![Tests](https://github.com/obsifox/eng-orchestrator/actions/workflows/test.yml/badge.svg)](https://github.com/obsifox/eng-orchestrator/actions/workflows/test.yml)
-[![Version](https://img.shields.io/badge/version-2.1.0-blue.svg)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-2.2.0-blue.svg)](CHANGELOG.md)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![Skill](https://img.shields.io/badge/skill-control%20plane%20%2B%20arena%20%2B%20project-orange.svg)](SKILL.md)
 [![Arena](https://img.shields.io/badge/arena-100%20agents%20tournament-red.svg)](skills/arena/)
 
 > **Engineering Orchestration Control Plane + Project Profiles + Arena Tournament** — Turns AI agent into adaptive org with state machine, run manager, event log, agent contracts, permissions, model routing, playbook engine, project profiles, preview, recovery, receipt + when answers are bad, 100 sub-agents fight to the death with distinct strategy cards (15 reasoning x 12 workflows x 12 strategies = 2160 combos), attack/defend/judge bracket until one survives.
 
-**v2.1.0 NEW (merged):** Arena tournament mode (bracket.py 1235 lines, strategies.json 2160 cards, rubric.md, config/arena.yaml, workflows/arena.yaml, scripts/arena.sh) + Project profiles (.eng/project.yaml, G5_Project gate, secret allow list, PHP detection) merged from v1.2.0/1.2.1 into v2.0 base. 151 eval PASS (108 unit + 43 simulated), 117 tests v1.2.
+**v2.3.1:** `platform/` now persists. Profiles, settings and diagnostic exports are written to disk with atomic writes, and a corrupt file is quarantined with a reason instead of vanishing. 100 tests.
+
+**v2.3.0:** `platform/` - a working environment core for the browser platform roadmap. Geo (five providers, uniform-over-disc radius sampling), timezone, locale (five surfaces kept apart), browser-scoped DNS (system, custom, DoH, DoT), versioned profiles with migration and checksums, a ten-stage pipeline, per-site policy precedence and consistency diagnostics, behind a control center interface. Standard library only, 84 tests, and 0 content policy findings across 20 files.
+
+**v2.2.0:** Content policy enforcement. `scripts/policy_scan.py` reads `.eng/policy.yaml` and fails the build on forbidden comment markers, emoji, non-permitted writing systems and prohibited branding. The comment rule is a per-language lexer, not a grep: `https://example.com`, a regex literal and Python floor division are not comments. New `G6_Policy` gate, 34 new asserts, `docs/security/policy-scan.md`.
+
+**v2.1.0 (merged):** Arena tournament mode (bracket.py 1235 lines, strategies.json 2160 cards, rubric.md, config/arena.yaml, workflows/arena.yaml, scripts/arena.sh) + Project profiles (.eng/project.yaml, G5_Project gate, secret allow list, PHP detection) merged from v1.2.0/1.2.1 into v2.0 base. 151 eval PASS (108 unit + 43 simulated), 117 tests v1.2.
 
 **v2.0.0:** Arena integrated - 100 agents 7 rounds 595 calls or quick 16 agents 4 rounds 91 calls, waves of 10, state on disk survives compaction, orchestrator never competes/judges.
 
@@ -25,7 +31,9 @@
 - **Arena Tournament (v2.0):** When answer bad or /arena, 16-100 agents compete with distinct cards, bracket until one survives
 - **Environment Detection:** Gracefully degrades if git/test runner/subagents missing, PHP before pytest
 - **Minimal Lenses:** Loads only minimum specialist checklists on demand (not personas)
-- **Hard Gates:** Executable, measurable gates G0-G5 with loop caps (2 cycles then escalate)
+- **Environment Core (v2.3):** `platform/` resolves location, timezone, locale, DNS and per-site policy into one descriptor, with provenance on every value and no silent fallback
+- **Content Policy (v2.2):** `.eng/policy.yaml` declares banned comment markers, emoji, writing systems and branding strings; a language-aware lexer enforces them and `G6_Policy` fails the build
+- **Hard Gates:** Executable, measurable gates G0-G6 with loop caps (2 cycles then escalate)
 - **Evidence Over Claims:** No PASS without artifact (log, file, diff). `NOT TESTED` if not run
 - **Independent Verification:** Verifier runs in fresh context, sees only spec+diff+logs
 - **State on Disk:** Versioned `.eng/` folder, not just chat memory
@@ -70,9 +78,17 @@ cat SKILL.md
 ./scripts/eng.sh gate G0_Build
 ./scripts/eng.sh gate G1_Tests
 ./scripts/eng.sh gate G5_Project
+./scripts/eng.sh gate G6_Policy   # NOT APPLICABLE until .eng/policy.yaml exists
 ./scripts/eng.sh gate all
 
-# 8. Run all tests (151 PASS v2.1)
+# 7b. Adopt a content policy (v2.2)
+cp .eng/templates/policy.yaml .eng/policy.yaml   # then edit it
+python3 scripts/policy_scan.py --config .eng/policy.yaml --check
+./scripts/policy_scan.sh                          # writes .eng/artifacts/policy_scan.log
+# examples/browser-platform.policy.yaml is a filled-in policy for a project that
+# bans slash comments, emoji, non-Latin scripts and organisation branding
+
+# 8. Run all tests (171 asserts across 9 suites, v2.2)
 ./tests/gates.test.sh          # 15
 ./tests/state_machine.test.sh  # 37
 ./tests/permissions.test.sh    # 21
@@ -80,10 +96,11 @@ cat SKILL.md
 ./tests/playbook.test.sh       # 7
 ./tests/arena.test.sh          # 20 NEW v2.0
 ./tests/project_profile.test.sh # 9 NEW v1.2
-./tests/dep_audit.test.sh      # ? NEW v1.2
+./tests/dep_audit.test.sh      # 12 v1.2
+./tests/policy_scan.test.sh    # 34 NEW v2.2
 ```
 
-## 📁 File Tree v2.1
+## 📁 File Tree v2.3
 
 ```
 SKILL.md (v2.1) - control plane + project profiles + arena, triggers: "build this", "اینو بیلد کن", "مسابقه بده", "arena"
@@ -118,6 +135,7 @@ adapters/
   project.yaml - NEW v1.2: build/test/lint commands + gate extras + secret allow file
   secret_scan.allow - NEW v1.2: allow list with reasons
   templates/project.yaml - template
+  templates/policy.yaml - NEW v2.2: content policy template for .eng/policy.yaml
   templates/ - brief, plan, decisions, evidence, state.json
   knowledge/ - lessons/, failures/, decisions/, patterns/, regressions/
 
@@ -125,6 +143,7 @@ scripts/ (control plane + gates + arena + project)
   eng.sh - main CLI: preview, run, list, show, state, event, recover, worktree, receipt, registry, playbook, gate, arena NEW, project NEW, knowledge, cost
   arena.sh - NEW v2.0: wrapper around bracket.py with run_manager integration
   project_profile.py/.sh - NEW v1.2: validate .eng/project.yaml, detect_cmds, G5_Project
+  policy_scan.py/.sh - NEW v2.2: forbidden comments (language-aware lexer), emoji, writing systems, branding -> G6_Policy
   state_machine.sh - list-states, validate, transition, current, history (37 tests)
   event_log.sh - append-only events.jsonl, 23 types + arena events
   run_manager.sh - create RUN-YYYY-XXXXXX with manifest, state, events, artifacts, checkpoints, receipt
@@ -138,8 +157,11 @@ scripts/ (control plane + gates + arena + project)
   cost_telemetry.sh - NEW v1.1: record/show metrics
   knowledge.sh - NEW v1.1: add/validate/promote-check/list
   lib_run.sh - run_step with EXIT_CODE, prefers project.yaml commands (v1.2)
-  detect_env.sh, baseline.sh, gate_check.sh (no state.json trust), secret_scan.sh (allow list v1.2), dep_audit.sh (PHP + nested v1.2), report_lint.sh
+  detect_env.sh, baseline.sh, gate_check.sh (no state.json trust, G0-G6 v2.2), secret_scan.sh (allow list v1.2), dep_audit.sh (PHP + nested v1.2), report_lint.sh, policy_scan.sh (v2.2)
 
+platform/ - NEW v2.3: environment core + control center
+  server.py, policy.yaml, run_tests.sh, core/ (10 modules), ui/, tests/
+  run: python3 platform/server.py --host 0.0.0.0 --port 8770   test: platform/run_tests.sh
 docs/
   arena/overview.md - NEW v2.0: full arena integration
   architecture/project-profile.md - NEW v1.2: project profile format
@@ -162,8 +184,8 @@ evals/
   results/ - v2.0-evaluation-report.md (151 PASS), v1.1-evaluation-report.md
 
 tests/
-  gates.test.sh (15), state_machine.test.sh (37), permissions.test.sh (21), recovery.test.sh (8), playbook.test.sh (7), arena.test.sh (20 NEW v2.0), project_profile.test.sh (9 NEW v1.2), dep_audit.test.sh = 117+ total v1.2 + 20 arena = 137+
-.github/workflows/test.yml - CI full suite v2.1 (gates, state_machine, permissions, recovery, playbook, arena, project_profile, dep_audit, eval, secret_scan, etc.)
+  gates.test.sh (15), state_machine.test.sh (37), permissions.test.sh (21), recovery.test.sh (8), playbook.test.sh (7), arena.test.sh (20 v2.0), project_profile.test.sh (17 v1.2), dep_audit.test.sh (12 v1.2.1), policy_scan.test.sh (34 NEW v2.2) = 171 total v2.2
+.github/workflows/test.yml - CI full suite v2.2 (gates, state_machine, permissions, recovery, playbook, arena, project_profile, dep_audit, policy_scan, eval, secret_scan, etc.)
 ```
 
 ## 🔒 Hard Rules Enforced

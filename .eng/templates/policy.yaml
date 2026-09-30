@@ -1,0 +1,67 @@
+# Content policy - copy to .eng/policy.yaml and fill in.
+# Read by scripts/policy_scan.py; enforced by the G6_Policy gate and scripts/policy_scan.sh.
+# Without this file the scan reports NOT APPLICABLE and the gate passes trivially.
+#
+# The parser implements a documented YAML subset: block mappings, block sequences
+# and scalars. Flow style such as [a, b] is rejected loudly rather than half-read.
+
+# Files in scope. `include` is optional; when it is absent every file that is not
+# excluded is scanned. Add `- path/**` entries to narrow the scan.
+scope:
+  exclude:
+    - "**/.git/**"
+    - "**/node_modules/**"
+    - "**/dist/**"
+    - "**/build/**"
+
+# Forbidden comment markers.
+# Markers: hash (#), slash_line (//), slash_block (/* */).
+# A marker is only checked for languages that actually have it, so declaring
+# slash_line never flags Python floor division or a URL inside a YAML value.
+comments:
+  enabled: true
+  forbid_markers:
+    - slash_line
+    - slash_block
+  # `languages` is optional. Absent means every language the scanner knows;
+  # list dialect names to keep findings scoped to the languages this project
+  # bans comments in, for example javascript, typescript, c, cpp, rust, css.
+  # An empty list is treated as absent, not as "no languages".
+
+# Emoji and pictographs.
+# `extended` adds arrows, geometric shapes and the legal marks (c) (R) (TM).
+emoji:
+  enabled: true
+  extended: false
+
+# Characters from writing systems the product language does not use.
+# This detects scripts, not grammar: accented Latin text written in a language
+# other than English is not detectable this way. See docs/security/policy-scan.md.
+# Absent means every known writing system is forbidden.
+language:
+  enabled: true
+  forbid_scripts:
+    - arabic
+    - hebrew
+    - cyrillic
+    - greek
+    - cjk
+    - hiragana
+    - katakana
+    - hangul
+    - thai
+    - devanagari
+  forbid_accented_latin: false
+
+# Prohibited organisation and product strings.
+# `allow_paths` is where attribution is permitted and must stay narrow.
+# A rule with no `prohibited` entries reports nothing.
+branding:
+  enabled: true
+  case_sensitive: false
+  word_boundary: false
+  prohibited:
+    - ChangeMe Organisation Name
+  allow_paths:
+    - "docs/legal/**"
+    - LICENSE

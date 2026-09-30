@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" role="img" aria-label="Environment control center mark">
+  <title>Environment control center mark</title>
+  <rect width="64" height="64" rx="14" fill="#0d1117"/>
+  <path d="M32 11 L16 19.5 L16 35.5 C16 44.5 23 51.5 32 55 Z" fill="#0d1117" stroke="#e6edf3" stroke-width="2.2" stroke-linejoin="round"/>
+  <path d="M32 11 L48 19.5 L48 35.5 C48 44.5 41 51.5 32 55 Z" fill="#e6edf3" stroke="#e6edf3" stroke-width="2.2" stroke-linejoin="round"/>
+  <path d="M20.5 27.5 L29 27.5 L24.5 34 Z" fill="#e5484d"/>
+  <path d="M43.5 27.5 L35 27.5 L39.5 34 Z" fill="#8b5cf6"/>
+</svg>

@@ -2,6 +2,77 @@
 
 All notable changes to eng-orchestrator skill.
 
+## 2.3.1 - 2026-09-30
+### Added - Platform persistence and recovery
+- **`platform/core/storage.py`:** Profiles, settings and diagnostic exports now live on disk in the layout the roadmap specifies (section 39): `profiles/index.json`, `profiles/<identifier>.json`, `settings/settings.json`, `diagnostics/`. Imported profiles, the active profile and saved reports survive a restart.
+- **Atomic writes:** a file is serialised to a temporary in the destination directory and renamed over the target, so a process that dies mid-write leaves the previous file intact rather than a truncated one.
+- **Quarantine rather than silence:** a file that cannot be parsed, fails validation, or carries a checksum that does not match its contents is renamed with a reason and a timestamp, reported in the load result, and the application still starts.
+- **Path building refuses to leave the root:** an identifier is validated and the resolved path is checked against the profiles directory, because the boundary that turns a string into a path should not depend on a validator elsewhere remaining correct.
+- **Settings:** active profile, redaction level and interface state, merged rather than replaced so a write of one section does not discard another.
+- **New API routes:** `POST /api/profiles/activate`, `POST /api/settings`, `GET /api/diagnostics/list`, and `persist=true` on `GET /api/diagnostics` to write a report to disk. Deleting the active profile is refused, so the environment is never left undefined.
+- **Interface:** an active-profile selector with activate and delete, a storage panel showing the directory, whether writes reach the disk, and anything quarantined on load, and a saved-exports table.
+- **Tests:** 16 storage tests added, suite total 100.
+
+### Fixed during development
+- **`storage.load()` did not catch a tampered profile file.** It compared the profile's checksum after `GeoProfile.from_payload` had already resealed it, so the comparison was between two freshly computed values and always agreed. Payloads now go through `ProfileStore.import_payload`, which is the same path an untrusted paste takes, so there is one validation path rather than two that can disagree.
+- **Settings on disk were ignored at start-up.** `PlatformStorage.__init__` created the directories but never read `settings.json`, so a restart lost the active profile.
+- **Diagnostic exports overwrote each other.** Filenames were built from a one-second timestamp with digits stripped from the label, so several exports inside the same second resolved to one name and all but the last were lost.
+- **The shipped `default` profile used a reserved identifier.** `validate_identifier` reserves `default`, so the profile could not survive a round trip through its own schema. It is now `default-environment`; the reservation is unchanged, because a user profile should not be able to shadow the name the application falls back to.
+
+### Notes
+- Performance has still not been measured. Stage timings are recorded per resolution and shown in the interface, which is what a benchmark would need, but no benchmark has been run and no performance claim is made.
+
+## 2.3.0 - 2026-09-30
+### Added - Browser Platform: Environment Core
+- **`platform/`:** A working implementation of the environment resolution layer the browser platform roadmap describes, plus a control center interface. Dependency-free, standard library only, no build step and no lockfile.
+- **Geo engine (`core/geo.py`):** Five providers (physical, virtual, automatic, hybrid, disabled) each declaring its own source and confidence. Radius sampling is uniform over the disc by sampling `R * sqrt(u)`, verified against 1500 samples with a mean at two thirds of the radius. Randomization modes: none, stable, session, dynamic, seeded.
+- **Timezone engine (`core/timezone_engine.py`):** Identifiers validated against the local tz database through `zoneinfo`, with offsets and daylight-saving state at a stated instant, plus a regional plausibility check for diagnostics. Case-insensitive identifier resolution, because the database contains no two identifiers differing only by case.
+- **Locale engine (`core/locale_engine.py`):** Keeps five surfaces apart - browser locale, language preference, HTTP language, JavaScript locale, system locale. BCP-47 validation with a documented restriction of the primary subtag to two or three letters. Accept-Language construction with quality decay that never reaches zero.
+- **DNS engine (`core/dns_engine.py`):** Browser-scoped resolution plans for system, custom, DoH and DoT. Endpoints must be HTTPS, ports and addresses are validated, and every plan reports its fallback with the consequence stated. The module imports no networking library and holds no file handle, so it cannot modify the operating system, and a test asserts that for all four modes.
+- **Profile engine (`core/profiles.py`):** Schema v3 with a migration path from v1 and v2, checksums computed on construction, strict unknown-field rejection, reserved identifiers, and import validation before activation. A checksum proves a file is intact, not that it is safe, and a profile from a newer schema is refused rather than interpreted.
+- **Pipeline (`core/environment.py`):** Ten named stages, each timed and recorded with status, output, provenance and notes. A failing stage stops the pipeline and names itself. Per-site policy precedence is total: origin beats subdomain beats domain, then longer patterns win.
+- **Diagnostics (`core/diagnostics.py`):** Consistency analysis across geolocation, timezone, locale, language, DNS and network, with the surfaces it does not control listed explicitly. Three redaction levels, defaulting to redacted, with credential-shaped values removed at every level.
+- **Host and detector (`core/host.py`):** Reads host signals without probing the network. Automatic detection returns a country centroid with a country-sized radius and a low confidence, because a timezone identifies a band of the globe and not a position within it.
+- **Server (`server.py`):** Standard library HTTP server on one origin, so the interface never calls localhost and never needs a cross-origin exception. Bound to 0.0.0.0 so the preview host can reach it.
+- **Interface (`ui/`):** Control center with ten panels covering the current environment, location, timezone, locale, network, DNS, the privacy dashboard, profiles, per-site rules and diagnostics. No build step, no framework.
+- **Tests:** 84 unit tests, all passing.
+- **Content policy:** `platform/policy.yaml` is enforced over the application source by the v2.2 scanner. The source reports 0 findings across 20 files on all four rules.
+
+### Fixed during development
+- `GeoProfile` could be constructed without a checksum, which made `verify_checksum` meaningless for every profile built in code rather than imported. Sealing now happens on construction.
+- `normalise_language_tag` accepted a leading or trailing dash, so `-en` resolved to `en`.
+- `is_valid_identifier` rejected `utc`, because the tz database lookup is case sensitive while the database contains no two identifiers differing only by case.
+- `VirtualProvider` reported a seed for a zero-radius area, implying randomization that had not happened.
+
+### Notes
+- The application does not claim to be a browser. It resolves what a browser should present and produces a descriptor; it does not render content and it does not contain a browser engine.
+- The consistency report is diagnostics, not a guarantee. It states what it examined and names canvas, WebGL, audio, fonts and screen metrics as surfaces it does not control and therefore cannot report on.
+- No performance claim is made here. Stage timings are recorded per resolution and visible in the interface, which is what a repeated benchmark would need, but no benchmark has been run.
+
+## 2.2.0 - 2026-09-30
+### Added - Content Policy Enforcement + G6_Policy Gate
+- **`scripts/policy_scan.py`:** Enforces `.eng/policy.yaml` across four rules - `comments` (forbidden comment markers), `emoji`, `language` (non-permitted writing systems) and `branding` (prohibited organisation strings outside allow paths). Dependency-free, reuses the YAML subset parser from `project_profile.py`.
+- **Language-aware comment lexer:** The comment rule is a lexer, not a grep. Each dialect declares which markers it actually has (javascript/typescript/c/cpp/rust/go/java/csharp/kotlin/swift/scala/dart/php/gradle = `//` + `/* */`, rust/swift/scala nest, css = `/* */` only, scss/sass/less/jsonc = both, sql = `--` + `/* */`, python/ruby/shell/yaml/toml/ini/r/makefile/dockerfile = `#`). Strings, template literals and regular expression literals are consumed before any marker is reported, so `https://example.com`, `/^https?:\/\/x$/`, `width / 2` and Python `total // count` are never findings. Regex-vs-division uses the standard preceding-token heuristic; its failure mode is a missed finding, never a fabricated one.
+- **Emoji rule:** Pictographic blocks U+1F000-U+1FAFF, U+2600-U+27BF, U+2B00-U+2BFF, U+2300-U+23FF, the emoji variation selector U+FE0F and the individual emoji-presentation codepoints. Copyright, registered and trade mark signs, arrows and geometric shapes stay out of the core set because license files and architecture diagrams legitimately use them; `emoji.extended: true` adds them.
+- **Language rule:** 29 writing systems by codepoint range (Arabic, Hebrew, Cyrillic, Greek, CJK, Hiragana, Katakana, Hangul, Thai, Devanagari, Armenian, Georgian, Khmer, Lao, Myanmar, Tamil, Telugu, Bengali, Gujarati, Gurmukhi, Kannada, Malayalam, Sinhala, Ethiopic, Tibetan, Mongolian, Cherokee, Syriac, Thaana). `forbid_accented_latin` adds Latin-1 Supplement and Latin Extended-A. Documented honestly as a script check, not a language check: ASCII German and Dutch are not detectable this way.
+- **Branding rule:** Case-insensitive substring matching by default, optional word boundaries, `allow_paths` globs for legal attribution.
+- **`scripts/policy_scan.sh`:** Wrapper writing `.eng/artifacts/policy_scan.log` with a `RESULT:` line and trailing `EXIT_CODE=`, the contract `gate_check.sh` reads.
+- **`G6_Policy` gate:** Part of `gate_check.sh all`. NOT APPLICABLE when `.eng/policy.yaml` is absent - a repository that never adopted a content policy is not failing one, and NOT APPLICABLE does not drag the overall verdict down.
+- **Exit codes:** 0 PASS, 1 violations, 3 NOT APPLICABLE, 4 empty config, 5 malformed config or unknown marker/script name, 6 internal error.
+- **Config:** `.eng/templates/policy.yaml` template, `examples/browser-platform.policy.yaml` filled-in example, `examples/browser-platform.project.yaml`.
+- **Fixtures:** `tests/fixtures/policy/dirty/` and `clean/` prove both directions - a URL, a regex literal, division, CSS `//` and Python floor division must not be reported, while a JS line comment, a JS block comment, a CSS block comment, a nested Rust block comment, a hash comment under a hash policy, emoji, four writing systems and a case-varied brand string must all be reported.
+- **Tests:** `tests/policy_scan.test.sh`, 34 asserts. Suite total 137 -> 171 across 9 suites.
+- **Docs:** `docs/security/policy-scan.md` covering the dialect table, the regex heuristic and its failure mode, the emoji ranges, the language rule's limits, exit codes and the gate contract.
+- **CI:** Three new steps - policy scan tests, template and example validation, and the dirty/clean fixture matrix asserting exit 1 and exit 0 respectively.
+
+### Fixed
+- `as_list` in `policy_scan.py` normalises an absent key, an empty mapping and an empty sequence to "nothing configured". Without this, an empty `include:` key parsed to `{}`, became a one-element glob list matching no file, and a scan of zero files would have reported PASS.
+- `scan_comments` had the block-comment span duplicated across the forbidden and not-forbidden branches. The span is now scanned once and only the reporting is conditional, so the two paths cannot drift. Behaviour is unchanged and covered by P11 (nested Rust block comment is one finding) and P13.
+
+### Notes
+- `eng-orchestrator` does not adopt `.eng/policy.yaml`. This repository uses `#` comments, pictographs in test output and documentation, Persian trigger phrases in `SKILL.md` and the organisation name in GitHub URLs. Applying the browser platform example policy to this tree yields 374 findings across 198 files, none of which is a defect here. The scanner is a tool a project adopts, not a rule the tool imposes.
+- CI installs `pyyaml` for other suites; `policy_scan.py` itself has no third-party dependency and runs on a bare `python3`.
+
 ## 2.1.0 - 2026-09-29
 ### Added - Merged v1.2.1 + v2.0.0 -> v2.1.0 (Major)
 - **Merge:** v1.2.0 (project profiles, PHP detection, G5_Project, secret allow list) + v1.2.1 (dep audit PHP/nested, timezone-aware, secret allow full log) + v2.0.0 (arena tournament) = v2.1.0. Resolves rebase conflict, preserves all features.
