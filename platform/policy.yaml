@@ -1,0 +1,70 @@
+# Content policy for this application.
+#
+# Applied with:
+#   python3 scripts/policy_scan.py --config platform/policy.yaml --root platform
+#
+# The policy is not a description of an intention. It runs in CI, and the
+# application source is expected to produce zero findings against it.
+
+scope:
+  exclude:
+    - "**/.git/**"
+    - "**/__pycache__/**"
+    # A policy file necessarily names every string it prohibits, so it would
+    # always report itself. It is configuration rather than product surface, and
+    # excluding it is narrower than exempting arbitrary paths elsewhere.
+    - "policy.yaml"
+
+comments:
+  enabled: true
+  forbid_markers:
+    - slash_line
+    - slash_block
+  languages:
+    - javascript
+    - typescript
+    - jsx
+    - tsx
+    - css
+    - scss
+    - c
+    - cpp
+    - java
+    - rust
+    - go
+
+emoji:
+  enabled: true
+  extended: false
+  # The extended set adds arrows, geometric shapes and the legal marks. It stays
+  # off because architecture documents in this tree use arrows in diagrams.
+
+language:
+  enabled: true
+  forbid_scripts:
+    - arabic
+    - hebrew
+    - cyrillic
+    - greek
+    - cjk
+    - hiragana
+    - katakana
+    - hangul
+    - thai
+    - devanagari
+    - armenian
+    - georgian
+  # Accented Latin is a warning sign, not proof: an English document may name a
+  # place that carries one. Kept off so the rule stays exact.
+  forbid_accented_latin: false
+
+branding:
+  enabled: true
+  case_sensitive: false
+  word_boundary: false
+  prohibited:
+    - ObsiFox
+    - obsifox
+  # No allow_paths key, which means nothing is exempt. The product surface
+  # carries no organisation name at all, so there is no attribution path to
+  # exempt in the first place.

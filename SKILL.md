@@ -118,6 +118,7 @@ Report from `references/report-template.md` + `receipt.json`. User language = us
 - `docs/` - architecture (incl project-profile.md, arena/overview.md), state-machine, agents, workflows, security (incl policy-scan.md v2.2), recovery, evaluation, adapters, audit
 - `references/` - tiers, lenses, playbooks (backward compat)
 - `tests/fixtures/policy/` + `tests/fixtures/policy-config/` - scanner fixtures and the configs that select them (v2.2)
+- `platform/` - NEW v2.3: a worked example of the control plane applied to a real project. Environment core (geo, timezone, locale, DNS, profiles, ten-stage pipeline, diagnostics) + control center interface, standard library only, `platform/policy.yaml` enforced by G6 over its own source, 84 tests via `platform/run_tests.sh`
 - `examples/browser-platform.policy.yaml` - a filled-in policy for a project that bans slash comments, emoji, non-Latin scripts and organisation branding (v2.2)
 - `.eng/knowledge/` - structured knowledge, `evals/` - 151 scenarios (108 unit + 43 simulated) v2.0, 117 v1.2
 - `tests/` - 171 asserts across 9 suites: gates 15, state_machine 37, permissions 21, recovery 8, playbook 7, project_profile 17, dep_audit 12, arena 20, policy_scan 34

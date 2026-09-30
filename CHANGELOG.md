@@ -2,6 +2,33 @@
 
 All notable changes to eng-orchestrator skill.
 
+## 2.3.0 - 2026-09-30
+### Added - Browser Platform: Environment Core
+- **`platform/`:** A working implementation of the environment resolution layer the browser platform roadmap describes, plus a control center interface. Dependency-free, standard library only, no build step and no lockfile.
+- **Geo engine (`core/geo.py`):** Five providers (physical, virtual, automatic, hybrid, disabled) each declaring its own source and confidence. Radius sampling is uniform over the disc by sampling `R * sqrt(u)`, verified against 1500 samples with a mean at two thirds of the radius. Randomization modes: none, stable, session, dynamic, seeded.
+- **Timezone engine (`core/timezone_engine.py`):** Identifiers validated against the local tz database through `zoneinfo`, with offsets and daylight-saving state at a stated instant, plus a regional plausibility check for diagnostics. Case-insensitive identifier resolution, because the database contains no two identifiers differing only by case.
+- **Locale engine (`core/locale_engine.py`):** Keeps five surfaces apart - browser locale, language preference, HTTP language, JavaScript locale, system locale. BCP-47 validation with a documented restriction of the primary subtag to two or three letters. Accept-Language construction with quality decay that never reaches zero.
+- **DNS engine (`core/dns_engine.py`):** Browser-scoped resolution plans for system, custom, DoH and DoT. Endpoints must be HTTPS, ports and addresses are validated, and every plan reports its fallback with the consequence stated. The module imports no networking library and holds no file handle, so it cannot modify the operating system, and a test asserts that for all four modes.
+- **Profile engine (`core/profiles.py`):** Schema v3 with a migration path from v1 and v2, checksums computed on construction, strict unknown-field rejection, reserved identifiers, and import validation before activation. A checksum proves a file is intact, not that it is safe, and a profile from a newer schema is refused rather than interpreted.
+- **Pipeline (`core/environment.py`):** Ten named stages, each timed and recorded with status, output, provenance and notes. A failing stage stops the pipeline and names itself. Per-site policy precedence is total: origin beats subdomain beats domain, then longer patterns win.
+- **Diagnostics (`core/diagnostics.py`):** Consistency analysis across geolocation, timezone, locale, language, DNS and network, with the surfaces it does not control listed explicitly. Three redaction levels, defaulting to redacted, with credential-shaped values removed at every level.
+- **Host and detector (`core/host.py`):** Reads host signals without probing the network. Automatic detection returns a country centroid with a country-sized radius and a low confidence, because a timezone identifies a band of the globe and not a position within it.
+- **Server (`server.py`):** Standard library HTTP server on one origin, so the interface never calls localhost and never needs a cross-origin exception. Bound to 0.0.0.0 so the preview host can reach it.
+- **Interface (`ui/`):** Control center with ten panels covering the current environment, location, timezone, locale, network, DNS, the privacy dashboard, profiles, per-site rules and diagnostics. No build step, no framework.
+- **Tests:** 84 unit tests, all passing.
+- **Content policy:** `platform/policy.yaml` is enforced over the application source by the v2.2 scanner. The source reports 0 findings across 20 files on all four rules.
+
+### Fixed during development
+- `GeoProfile` could be constructed without a checksum, which made `verify_checksum` meaningless for every profile built in code rather than imported. Sealing now happens on construction.
+- `normalise_language_tag` accepted a leading or trailing dash, so `-en` resolved to `en`.
+- `is_valid_identifier` rejected `utc`, because the tz database lookup is case sensitive while the database contains no two identifiers differing only by case.
+- `VirtualProvider` reported a seed for a zero-radius area, implying randomization that had not happened.
+
+### Notes
+- The application does not claim to be a browser. It resolves what a browser should present and produces a descriptor; it does not render content and it does not contain a browser engine.
+- The consistency report is diagnostics, not a guarantee. It states what it examined and names canvas, WebGL, audio, fonts and screen metrics as surfaces it does not control and therefore cannot report on.
+- No performance claim is made here. Stage timings are recorded per resolution and visible in the interface, which is what a repeated benchmark would need, but no benchmark has been run.
+
 ## 2.2.0 - 2026-09-30
 ### Added - Content Policy Enforcement + G6_Policy Gate
 - **`scripts/policy_scan.py`:** Enforces `.eng/policy.yaml` across four rules - `comments` (forbidden comment markers), `emoji`, `language` (non-permitted writing systems) and `branding` (prohibited organisation strings outside allow paths). Dependency-free, reuses the YAML subset parser from `project_profile.py`.
